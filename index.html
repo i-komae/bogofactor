@@ -10,6 +10,7 @@
     <title>BOGO / FACTOR — Entropy Terminal</title>
     <link rel="stylesheet" href="css/terminal.css"/>
     <link rel="stylesheet" href="css/share.css"/>
+    <link rel="stylesheet" href="css/interface.css"/>
   </head>
   <body data-state="boot" data-fx="full" data-view="input">
     <a class="skip-link" href="#n-input">Skip to input</a>
@@ -29,7 +30,7 @@
       <header class="masthead">
         <div class="system-id">
           <span class="system-mark" aria-hidden="true"><i></i><i></i><i></i></span>
-          <span>ENTROPY TERMINAL <b>/ 17</b></span>
+          <span>LEAVE IT TO LUCK.</span>
         </div>
         <div class="toolbar" aria-label="Display controls">
           <button type="button" class="tool" id="fx-toggle" aria-pressed="true" title="Turn decorative motion off"><span class="tool-light" aria-hidden="true"></span><span id="fx-label">FX / FULL</span></button>
@@ -50,15 +51,14 @@
         </div>
       </section>
       <nav class="mobile-tabs" aria-label="Workspace views">
-        <button id="view-input" aria-controls="workspace" type="button" aria-pressed="true">01 / TARGET</button>
-        <button id="view-live" aria-controls="workspace" type="button" aria-pressed="false" disabled="">02 / LIVE</button>
+        <button id="view-input" aria-controls="workspace" type="button" aria-pressed="true">TARGET</button>
+        <button id="view-live" aria-controls="workspace" type="button" aria-pressed="false" disabled="">LIVE</button>
       </nav>
       </div>
       <div class="workspace" id="workspace">
         <form id="form" class="panel payload" novalidate="">
           <div class="panel-heading">
-            <h2><span class="panel-index">01</span> TARGET PAYLOAD</h2>
-            <span class="panel-code">INPUT / N</span>
+            <h2>TARGET PAYLOAD</h2>
           </div>
           <div class="payload-body">
             <div class="field-heading">
@@ -119,29 +119,15 @@
         </form>
         <section class="panel core" aria-label="Live divisor search">
           <div class="panel-heading">
-            <h2><span class="panel-index">02</span> ENTROPY CORE</h2>
+            <h2>ENTROPY CORE</h2>
             <span class="state-indicator" id="status" role="status" aria-live="polite" data-state="boot">INITIALIZING</span>
           </div>
           <div class="core-view" id="core-view">
             <canvas id="reactor" aria-hidden="true"></canvas>
-            <div class="core-coordinate coord-top" aria-hidden="true">
-              PHASE FIELD
-              <br/>
-              <b>UNIFORM / W17</b>
-            </div>
-            <div class="core-coordinate coord-right" aria-hidden="true">
-              X
-              <br/>
-              Y
-              <br/>
-              Z
-            </div>
             <div class="core-state" aria-hidden="true">
-              <span class="core-state-kicker">B / F</span>
               <strong id="core-word">STANDBY</strong>
               <span id="core-sub">AWAITING INPUT</span>
             </div>
-            <span class="schematic-label">ENTROPY / ONLINE</span>
             <div class="lock-banner" id="lock-banner" aria-hidden="true">
               <span>NON-TRIVIAL DIVISOR</span>
               <b>FACTOR LOCKED</b>
@@ -174,8 +160,7 @@
         <aside class="side-stack" aria-label="Runtime telemetry">
           <section class="panel throughput-panel">
             <div class="panel-heading">
-              <h2><span class="panel-index">03</span> TELEMETRY</h2>
-              <span class="panel-code">LIVE</span>
+              <h2>TELEMETRY</h2>
             </div>
             <div class="telemetry-body">
               <div class="telemetry-label">
@@ -210,10 +195,9 @@
           </section>
           <section class="panel log-panel">
             <div class="panel-heading">
-              <h2><span class="panel-index">04</span> EVENT STREAM</h2>
-              <span class="panel-code">LOCAL</span>
+              <h2>EVENT STREAM</h2>
             </div>
-            <div id="event-log" class="event-log" role="region" aria-label="Recent actual engine events" tabindex="0"></div>
+            <div id="event-log" class="event-log" role="region" aria-label="Live computation activity" aria-live="off" tabindex="0"></div>
             <div class="terminal-prompt" aria-hidden="true">
               <span>factor@local:~</span>
               <i></i>
@@ -222,7 +206,7 @@
         </aside>
         <section class="panel output" id="output-panel" aria-label="Divisor search result">
           <div class="output-label">
-            <span class="panel-index">05 / RESULT</span>
+            <span class="eyebrow">RESULT</span>
             <h2 id="result-heading">AWAITING<br/>RESULT</h2>
             <div class="verification" id="verification">N = d × q</div>
           </div>
@@ -254,10 +238,6 @@
         </div>
         <b>END</b>
       </div>
-      <footer class="footer">
-        <span>O(1)* IN THE BEST CASE. THE REST IS LUCK.</span>
-        <span>AUTO THEME <i>/</i> LOCAL ENGINE <i>/</i> BUILD 17</span>
-      </footer>
       <noscript>
         <p class="error">Enable JavaScript to use this application.</p>
       </noscript>
@@ -268,7 +248,7 @@
       <form method="dialog">
         <button class="dialog-close" aria-label="Close">×</button>
       </form>
-      <p class="eyebrow">BOGO / FACTOR — BUILD 17</p>
+      <p class="eyebrow">BOGO / FACTOR</p>
       <h2 id="about-title">O(1).<br/><span>IF LUCKY.</span></h2>
       <p class="about-hook">Find one non-trivial factor.<br/>Leave the rest to luck.</p>
       <p class="fine-print">*Best-case trial count. Big-integer arithmetic is not constant-time.</p>
@@ -314,6 +294,7 @@
     <script defer src="js/presets.js"></script>
     <script defer src="js/numbers.js"></script>
     <script defer src="js/audio.js"></script>
+    <script defer src="js/event-stream.js"></script>
     <script defer src="js/visuals.js"></script>
     <script defer src="js/engine-data.js"></script>
     <script defer src="js/worker.js"></script>

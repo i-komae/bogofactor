@@ -187,7 +187,7 @@ const BogoVisual = (() => {
   let peakDisplay = null;
   let state = 'boot', wanted = true, runningFrame = 0, lastFrame = 0, phase = 0;
   let width = 480, height = 300, dpr = 1, visible = !document.hidden, inView = true;
-  let palette = {}, frames = 0, drawMs = 0, lastLog = 0, lastLogTrials = 0n;
+  let palette = {}, frames = 0, drawMs = 0;
   let toastTimer = 0, hitTimer = 0, startTimer = 0;
   let target = '1000000016000000063', lastInput = null, lastSnapshot = null;
   const samples = new Float64Array(48); let sampleHead = 0, sampleCount = 0;
@@ -196,6 +196,7 @@ const BogoVisual = (() => {
   const scan = new Float64Array(97 * 3);
   let lastTelemetry = -Infinity;
   const workerMeters = new WorkerMeters($('worker-lanes'));
+  const activity = new EventStream($('event-log'));
   // Equal angular rings give a stable wireframe, not fabricated factor candidates.
   for (let lat = 0; lat < 9; lat++) for (let lon = 0; lon < 20; lon++) {
     const a = (lat + 1) * Math.PI / 10, b = lon * Math.PI / 10, i = (lat * 20 + lon) * 3;
@@ -206,18 +207,7 @@ const BogoVisual = (() => {
     clearTimeout(toastTimer); $('toast').textContent = text; $('toast').hidden = false;
     toastTimer = setTimeout(() => { $('toast').hidden = true; }, 3300);
   }
-  function log(tag, text, level = '') {
-    const container = $('event-log');
-    const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 30;
-    const row = document.createElement('div'); row.className = 'event'; row.dataset.level = level;
-    const time = document.createElement('time'), code = document.createElement('b');
-    const now = new Date();
-    time.dateTime = now.toISOString(); time.textContent = now.toLocaleTimeString('en-GB', { hour12: false });
-    code.textContent = tag + ' ';
-    row.append(time, code, document.createTextNode(text)); container.append(row);
-    while (container.children.length > 16) container.firstElementChild.remove();
-    if (atBottom) container.scrollTop = container.scrollHeight;
-  }
+  function log(tag, text, level = '') { activity.log(tag, text, level); }
   function colors() {
     const style = getComputedStyle(body), get = k => style.getPropertyValue(k).trim();
     palette = { accent: get('--accent'), muted: get('--muted'), line: get('--line'), fine: get('--fine'), second: get('--secondary'), ink: get('--ink'), success: get('--success'), amber: get('--amber') };
@@ -332,16 +322,14 @@ const BogoVisual = (() => {
       ctx.fillRect(x - 1, y - 1, i % 3 ? 2 : 3, i % 3 ? 2 : 3);
       if (active && i % 3 === 0) ring(r, a - .12, a, main, 1, .2);
     }
-    // Four sighting brackets and degree labels are static annotation.
+    // Four sighting brackets anchor the rotating geometry without dummy labels.
     ctx.globalAlpha = .72; ctx.strokeStyle = main; ctx.lineWidth = 1; ctx.beginPath();
     for (let i = 0; i < 4; i++) {
       const a = i * Math.PI / 2, x = Math.cos(a) * (R + 22), y = Math.sin(a) * (R + 22);
       line(x - Math.sin(a) * 4, y + Math.cos(a) * 4, x, y);
       line(x, y, x + Math.sin(a) * 4, y - Math.cos(a) * 4);
     }
-    ctx.stroke(); ctx.font = '7px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = palette.muted;
-    ctx.fillText('000', 0, -R - 20); ctx.fillText('180', 0, R + 27);
-    if (width > 410) { ctx.fillText('270', -R - 35, 3); ctx.fillText('090', R + 35, 3); }
+    ctx.stroke();
     // Sparse fixed registration marks share the globe's coordinates. No
     // mirrored, expanding strips compete with the title or central readout.
     if (width > 510) {
@@ -405,6 +393,9 @@ const BogoVisual = (() => {
       prime: ['CHECK', 'prime input; search skipped'], probable: ['CHECK', 'BPSW passed; not a proof'],
       capped: ['LIMIT', 'trial limit reached'], interrupted: ['STOP', 'page session interrupted'], 'counter-limit': ['LIMIT', '64-bit counter exhausted']
     };
+    if (next === 'screening' && lastInput) {
+      log('INPUT', lastInput.length + ' digits · ' + BigInt(lastInput).toString(2).length + ' bits');
+    }
     if (messages[next]) log(...messages[next], next === 'found' ? 'hit' : ['capped', 'probable', 'paused'].includes(next) ? 'warn' : '');
     clearTimeout(startTimer); body.classList.remove('start-effect');
     if (next === 'running' && previous !== 'running') {
@@ -440,11 +431,7 @@ const BogoVisual = (() => {
       if (snapshot.status === 'running' && state !== 'pausing' && state !== 'stopping') chart(snapshot.rate);
       lastTelemetry = snapshot.elapsedMs;
     }
-    if (snapshot.status === 'running' && snapshot.elapsedMs - lastLog >= 1600) {
-      const n = BigInt(snapshot.trials), delta = n - lastLogTrials;
-      log('TEST', '+' + BogoNumbers.compactInteger(delta) + ' evaluated / no hit');
-      lastLog = snapshot.elapsedMs; lastLogTrials = n;
-    }
+    if (state === 'running') activity.update(snapshot);
   }
   function input(n) {
     if (n === lastInput) return;
@@ -455,7 +442,7 @@ const BogoVisual = (() => {
     $('target-stream').textContent = Array(5).fill(text).join('  //  ');
   }
   function reset() {
-    lastTelemetry = -Infinity; samples.fill(0); sampleHead = 0; sampleCount = 0; lastLog = 0; lastLogTrials = 0n; lastSnapshot = null; workerMeters.update({ workers: [] });
+    lastTelemetry = -Infinity; samples.fill(0); sampleHead = 0; sampleCount = 0; activity.reset(); lastSnapshot = null; workerMeters.update({ workers: [] });
     $('rate-path').setAttribute('d', 'M0 70H260'); $('rate-area').setAttribute('d', 'M0 76H260Z'); peakDisplay?.reset();
     $('rate-chart').setAttribute('aria-label', 'Measured throughput history; no data yet');
     clearTimeout(hitTimer); body.classList.remove('hit-effect');
@@ -479,9 +466,9 @@ const BogoVisual = (() => {
   });
   $('about').addEventListener('click', () => $('about-dialog').showModal());
   $('about-dialog').addEventListener('click', e => { if (e.target === $('about-dialog')) { const r = e.target.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) e.target.close(); } });
-  document.addEventListener('visibilitychange', () => { visible = !document.hidden; syncMotion(); });
-  addEventListener('pagehide', () => { visible = false; syncMotion(); });
-  addEventListener('pageshow', () => { visible = !document.hidden; syncMotion(); });
+  document.addEventListener('visibilitychange', () => { visible = !document.hidden; if (!visible) activity.cancelScroll(); syncMotion(); });
+  addEventListener('pagehide', () => { visible = false; activity.cancelScroll(); syncMotion(); });
+  addEventListener('pageshow', () => { visible = !document.hidden; if (!visible) activity.cancelScroll(); syncMotion(); });
   reduce.addEventListener('change', syncMotion); dark.addEventListener('change', colors);
   if (window.ResizeObserver) new ResizeObserver(size).observe(canvas.parentElement); else addEventListener('resize', size);
   if (window.IntersectionObserver) new IntersectionObserver(entries => { inView = entries[0].isIntersecting; syncMotion(); }, { rootMargin: '80px' }).observe(canvas.parentElement);
