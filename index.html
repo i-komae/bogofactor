@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta name="color-scheme" content="light dark"/>
+    <meta name="theme-color" content="#eaf1f4" media="(prefers-color-scheme: light)"/>
+    <meta name="theme-color" content="#070e18" media="(prefers-color-scheme: dark)"/>
+    <meta name="description" content="Find one non-trivial factor by random sampling. Real arithmetic, excessive drama."/>
+    <title>BOGO / FACTOR — Entropy Terminal</title>
+    <link rel="stylesheet" href="css/terminal.css"/>
+    <link rel="stylesheet" href="css/share.css"/>
+  </head>
+  <body data-state="boot" data-fx="full" data-view="input">
+    <a class="skip-link" href="#n-input">Skip to input</a>
+    <div class="ambient-grid" aria-hidden="true"></div>
+    <div id="boot-intro" aria-hidden="true">
+      <div class="boot-cross"></div>
+      <div class="boot-title">
+        BOGO
+        <span>/</span>
+        FACTOR
+      </div>
+      <div class="boot-line"></div>
+      <span class="boot-motto">O(1). IF LUCKY.</span>
+    </div>
+    <main class="app">
+      <div class="chrome">
+      <header class="masthead">
+        <div class="system-id">
+          <span class="system-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>ENTROPY TERMINAL <b>/ 17</b></span>
+        </div>
+        <div class="toolbar" aria-label="Display controls">
+          <button type="button" class="tool" id="fx-toggle" aria-pressed="true" title="Turn decorative motion off"><span class="tool-light" aria-hidden="true"></span><span id="fx-label">FX / FULL</span></button>
+          <button type="button" class="tool" id="sound-toggle" aria-pressed="false" title="Play Cyber 08 — MaouDamashii">BGM / OFF</button>
+          <button type="button" class="tool fullscreen-tool" id="fullscreen" title="Enter fullscreen (F)"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 3H3v4m10-4h4v4M3 13v4h4m10-4v4h-4"></path></svg><span>FULLSCREEN</span></button>
+          <button type="button" class="tool about-tool" id="about" aria-label="About this experiment">?</button>
+        </div>
+      </header>
+      <section class="deck-intro" aria-label="Bogo Factor">
+        <div>
+          <p class="eyebrow">RANDOM DIVISOR SEARCH</p>
+          <h1>BOGO<span class="slash">/</span>FACTOR<span class="title-cursor" aria-hidden="true">_</span></h1>
+        </div>
+        <div class="intro-meta">
+          <span class="local-light" aria-hidden="true"></span>
+          BEST CASE: O(1)*
+          <p>ONE GUESS. ZERO PATIENCE.</p>
+        </div>
+      </section>
+      <nav class="mobile-tabs" aria-label="Workspace views">
+        <button id="view-input" aria-controls="workspace" type="button" aria-pressed="true">01 / TARGET</button>
+        <button id="view-live" aria-controls="workspace" type="button" aria-pressed="false" disabled="">02 / LIVE</button>
+      </nav>
+      </div>
+      <div class="workspace" id="workspace">
+        <form id="form" class="panel payload" novalidate="">
+          <div class="panel-heading">
+            <h2><span class="panel-index">01</span> TARGET PAYLOAD</h2>
+            <span class="panel-code">INPUT / N</span>
+          </div>
+          <div class="payload-body">
+            <div class="field-heading">
+              <label for="preset">LOAD TARGET</label>
+              <span id="input-digits">19 DIGITS</span>
+            </div>
+            <div class="select-wrap">
+              <select id="preset" aria-label="Select an input example">
+                <option value="">Custom integer</option>
+              </select>
+              <span aria-hidden="true">⌄</span>
+            </div>
+            <label class="sr-only" for="n-input">Integer N to factor</label>
+            <div class="input-frame">
+              <textarea id="n-input" rows="2" inputmode="numeric" spellcheck="false" autocomplete="off" autocapitalize="off" maxlength="10000" aria-describedby="error">1000000016000000063</textarea>
+              <span class="input-cross" aria-hidden="true">+</span>
+            </div>
+            <div class="input-meta">
+              <span>INTEGER / EXACT</span>
+              <span id="input-bits">60 BITS</span>
+            </div>
+            <div class="candidate-block">
+              <span class="eyebrow">ELIGIBLE CANDIDATES</span>
+              <output id="candidate-count" aria-live="polite">—</output>
+              <span class="candidate-note">UNIFORM DRAW · WITH REPLACEMENT</span>
+            </div>
+            <div class="limit-row">
+              <label for="cap">TRIAL LIMIT</label>
+              <div class="select-wrap">
+                <select id="cap">
+                  <option value="100000">100,000</option>
+                  <option value="1000000">1,000,000</option>
+                  <option value="100000000">100,000,000</option>
+                  <option value="0" selected="">Unlimited</option>
+                </select>
+                <span aria-hidden="true">⌄</span>
+              </div>
+            </div>
+            <div class="worker-setting">
+              <label for="workers">WORKERS <span id="workers-hint"></span></label>
+              <div class="select-wrap">
+                <select id="workers" aria-label="Number of parallel workers"></select>
+                <span aria-hidden="true">⌄</span>
+              </div>
+            </div>
+            <div class="actions">
+              <button type="submit" id="start" class="primary" disabled=""><span class="button-bracket" aria-hidden="true">[</span><span id="start-label">INITIALIZING</span><span class="button-arrow" aria-hidden="true">↗</span></button>
+              <button type="button" id="stop" class="abort" hidden="">ABORT</button>
+            </div>
+            <p class="key-hint"><span>⌘ / CTRL + ENTER</span><span>RUN / PAUSE</span></p>
+            <p id="error" class="error" role="alert" hidden=""></p>
+          </div>
+          <div class="payload-foot">
+            <span class="mini-cross" aria-hidden="true">+</span>
+            <span>BEST CASE: ONE TRIAL.</span>
+            <span class="mini-cross" aria-hidden="true">+</span>
+          </div>
+        </form>
+        <section class="panel core" aria-label="Live divisor search">
+          <div class="panel-heading">
+            <h2><span class="panel-index">02</span> ENTROPY CORE</h2>
+            <span class="state-indicator" id="status" role="status" aria-live="polite" data-state="boot">INITIALIZING</span>
+          </div>
+          <div class="core-view" id="core-view">
+            <canvas id="reactor" aria-hidden="true"></canvas>
+            <div class="core-coordinate coord-top" aria-hidden="true">
+              PHASE FIELD
+              <br/>
+              <b>UNIFORM / W17</b>
+            </div>
+            <div class="core-coordinate coord-right" aria-hidden="true">
+              X
+              <br/>
+              Y
+              <br/>
+              Z
+            </div>
+            <div class="core-state" aria-hidden="true">
+              <span class="core-state-kicker">B / F</span>
+              <strong id="core-word">STANDBY</strong>
+              <span id="core-sub">AWAITING INPUT</span>
+            </div>
+            <span class="schematic-label">ENTROPY / ONLINE</span>
+            <div class="lock-banner" id="lock-banner" aria-hidden="true">
+              <span>NON-TRIVIAL DIVISOR</span>
+              <b>FACTOR LOCKED</b>
+            </div>
+          </div>
+          <div class="trial-block">
+            <div class="counter-heading">
+              <h3>TRIALS EXECUTED</h3>
+              <span class="live-tag" id="counter-tag">EXACT COUNT</span>
+            </div>
+            <div class="counter">
+              <output id="trial-count" class="counter-number" aria-live="off" aria-label="0 trials"><span class="sr-only" id="exact-count">0</span><span id="counter-reels" aria-hidden="true"></span></output>
+            </div>
+          </div>
+          <dl class="stats">
+            <div>
+              <dt>ELAPSED</dt>
+              <dd><span id="elapsed">—</span><span id="elapsed-unit" class="unit"></span></dd>
+            </div>
+            <div>
+              <dt id="rate-label">THROUGHPUT</dt>
+              <dd><span id="rate">—</span><span id="rate-unit" class="unit"></span></dd>
+            </div>
+          </dl>
+          <div class="core-bottom">
+            <span id="core-engine">WASM / INITIALIZING</span>
+            <span id="core-workers">WORKERS / READY</span>
+          </div>
+        </section>
+        <aside class="side-stack" aria-label="Runtime telemetry">
+          <section class="panel throughput-panel">
+            <div class="panel-heading">
+              <h2><span class="panel-index">03</span> TELEMETRY</h2>
+              <span class="panel-code">LIVE</span>
+            </div>
+            <div class="telemetry-body">
+              <div class="telemetry-label">
+                <span>TRIALS / SECOND</span>
+                <span id="chart-peak">—</span>
+              </div>
+              <svg id="rate-chart" viewBox="0 0 260 76" role="img" aria-label="Measured throughput history; no data yet"><path class="chart-grid" d="M0 12H260M0 38H260M0 64H260M52 0V76M104 0V76M156 0V76M208 0V76"></path><path id="rate-area" d="M0 76H260Z"></path><path id="rate-path" d="M0 70H260"></path></svg>
+              <div class="chart-axis">
+                <span>RECENT SAMPLES</span>
+                <span>NOW</span>
+              </div>
+              <div class="worker-heading">
+                <span>COMPUTE ARRAY</span>
+                <span id="workers-active">—</span>
+              </div>
+              <div id="worker-lanes" aria-label="Per-worker throughput"></div>
+              <dl class="runtime-list">
+                <div>
+                  <dt>EXECUTION</dt>
+                  <dd id="engine-mode">LOADING</dd>
+                </div>
+                <div>
+                  <dt>ENTROPY</dt>
+                  <dd>ChaCha20</dd>
+                </div>
+                <div>
+                  <dt>SAMPLER</dt>
+                  <dd>WHEEL / 17</dd>
+                </div>
+              </dl>
+            </div>
+          </section>
+          <section class="panel log-panel">
+            <div class="panel-heading">
+              <h2><span class="panel-index">04</span> EVENT STREAM</h2>
+              <span class="panel-code">LOCAL</span>
+            </div>
+            <div id="event-log" class="event-log" role="region" aria-label="Recent actual engine events" tabindex="0"></div>
+            <div class="terminal-prompt" aria-hidden="true">
+              <span>factor@local:~</span>
+              <i></i>
+            </div>
+          </section>
+        </aside>
+        <section class="panel output" id="output-panel" aria-label="Divisor search result">
+          <div class="output-label">
+            <span class="panel-index">05 / RESULT</span>
+            <h2 id="result-heading">AWAITING<br/>RESULT</h2>
+            <div class="verification" id="verification">N = d × q</div>
+          </div>
+          <div class="output-body" tabindex="0" aria-label="Complete divisor search result">
+            <div id="factor-empty" class="factor-empty">
+              <span class="empty-dashes" aria-hidden="true">— — —</span>
+              <span id="empty-message">No non-trivial divisor found.</span>
+            </div>
+            <div id="factor-values" class="factor-values" hidden="">
+              <span id="factor-d"></span>
+              <span class="multiply" aria-label="times">×</span>
+              <span id="factor-q"></span>
+            </div>
+            <p id="result-note" class="result-note" hidden=""></p>
+          </div>
+          <button type="button" id="copy" class="copy" hidden=""><span id="copy-label">SHARE</span><span aria-hidden="true">↗</span></button>
+          <div class="result-flare" aria-hidden="true"></div>
+        </section>
+      </div>
+      <div class="mobile-dock">
+        <button id="mobile-main" type="button" class="primary"><span id="mobile-main-label">PAUSE SEARCH</span><span aria-hidden="true">Ⅱ</span></button>
+        <button id="mobile-stop" class="abort" type="button">ABORT</button>
+        <button id="mobile-new" class="primary" type="button" hidden="">NEW TARGET <span aria-hidden="true">↗</span></button>
+      </div>
+      <div class="data-rail" aria-hidden="true">
+        <span>TARGET / HEX</span>
+        <div class="data-rail-window">
+          <span id="target-stream">28A3</span>
+        </div>
+        <b>END</b>
+      </div>
+      <footer class="footer">
+        <span>O(1)* IN THE BEST CASE. THE REST IS LUCK.</span>
+        <span>AUTO THEME <i>/</i> LOCAL ENGINE <i>/</i> BUILD 17</span>
+      </footer>
+      <noscript>
+        <p class="error">Enable JavaScript to use this application.</p>
+      </noscript>
+    </main>
+    <p id="announcement" class="sr-only" role="status" aria-live="polite"></p>
+    <div id="toast" role="status" hidden=""></div>
+    <dialog id="about-dialog" aria-labelledby="about-title">
+      <form method="dialog">
+        <button class="dialog-close" aria-label="Close">×</button>
+      </form>
+      <p class="eyebrow">BOGO / FACTOR — BUILD 17</p>
+      <h2 id="about-title">O(1).<br/><span>IF LUCKY.</span></h2>
+      <p class="about-hook">Find one non-trivial factor.<br/>Leave the rest to luck.</p>
+      <p class="fine-print">*Best-case trial count. Big-integer arithmetic is not constant-time.</p>
+      <div class="credits">
+        <h3>SOUNDTRACK</h3>
+        <p><a href="https://maou.audio/bgm_cyber08/" target="_blank" rel="noopener noreferrer">Cyber 08</a></p>
+        <p>Music: MaouDamashii / Koichi Morita<br/>
+<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a> · <a href="https://maou.audio/rule/" target="_blank" rel="noopener noreferrer">Usage terms</a><br/>
+      Original loop recording. Playback volume adjusted.</p>
+      </div>
+      <p class="fine-print">BOGO / FACTOR · i-komae.github.io/bogofactor</p>
+    </dialog>
+    <dialog id="share-dialog" aria-labelledby="share-title">
+      <div class="share-heading">
+        <div>
+          <p class="eyebrow">BOGO / FACTOR</p>
+          <h2 id="share-title">SHARE RESULT</h2>
+        </div>
+        <form method="dialog">
+          <button type="submit" class="dialog-close" aria-label="Close sharing">×</button>
+        </form>
+      </div>
+      <div class="share-preview-window" tabindex="0" aria-label="Result image preview">
+        <button type="button" id="share-zoom" aria-label="Toggle full-size image preview" aria-pressed="false" disabled=""><img id="share-preview" alt="" hidden=""/></button>
+      </div>
+      <p class="share-preview-meta"><span id="share-size">PNG</span><span>CLICK IMAGE TO INSPECT</span></p>
+      <div class="share-actions" aria-label="Export actions">
+        <button type="button" id="share-copy-text"><span>COPY TEXT</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10M10 5v10M7 15h6"></path></svg></button>
+        <button type="button" id="share-copy-image"><span>COPY IMAGE</span><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="6" y="6" width="11" height="11"></rect><path d="M13 3H3v10"></path></svg></button>
+        <button type="button" id="share-save"><span>SAVE PNG</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v11m-4-4 4 4 4-4M3 14v3h14v-3"></path></svg></button>
+        <button type="button" id="share-native"><span id="share-native-label">SHARE…</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 13V2M6 6l4-4 4 4M5 9H3v8h14V9h-2"></path></svg></button>
+      </div>
+      <p id="share-feedback" role="status" aria-live="polite"></p>
+      <p id="share-availability" hidden=""></p>
+      <details id="share-text-details">
+        <summary>Result text</summary>
+        <textarea id="share-text" readonly="" aria-label="Complete result text" spellcheck="false"></textarea>
+      </details>
+    </dialog>
+    <!-- All code, engines and music are served from this application directory. -->
+    <script defer src="js/common.js"></script>
+    <script defer src="js/rate.js"></script>
+    <script defer src="js/presets.js"></script>
+    <script defer src="js/numbers.js"></script>
+    <script defer src="js/audio.js"></script>
+    <script defer src="js/visuals.js"></script>
+    <script defer src="js/engine-data.js"></script>
+    <script defer src="js/worker.js"></script>
+    <script defer src="js/pool.js"></script>
+    <script defer src="js/share-card.js"></script>
+    <script defer src="js/share.js"></script>
+    <script defer src="js/ui.js"></script>
+  </body>
+</html>
