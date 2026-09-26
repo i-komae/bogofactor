@@ -4,7 +4,8 @@
 class EventStream {
   constructor(root) {
     this.root = root;
-    this.lastAt = 0;
+    this.nextAt = 0;
+    this.interval = 1000 / 12;
     this.lastWork = 0n;
     this.step = 0;
     this.worker = 0;
@@ -38,14 +39,14 @@ class EventStream {
     const start = performance.now();
     const scroll = now => {
       this.scrollFrame = 0;
-      const t = Math.min(1, Math.max(0, (now - start) / 170));
+      const t = Math.min(1, Math.max(0, (now - start) / 70));
       this.root.scrollTop = from + (end - from) * (1 - (1 - t) ** 3);
       if (t < 1 && !this.quiet()) this.scrollFrame = requestAnimationFrame(scroll);
       else this.root.scrollTop = end;
     };
     this.scrollFrame = requestAnimationFrame(scroll);
   }
-  log(tag, text, level = '') {
+  log(tag, text, level = '', detail = text) {
     const root = this.root;
     const tail = this.following || root.scrollHeight - root.scrollTop - root.clientHeight <= 12;
     const oldTop = root.scrollTop, oldHeight = root.scrollHeight;
@@ -56,9 +57,11 @@ class EventStream {
     time.textContent = now.toLocaleTimeString('en-GB', { hour12: false });
     code.textContent = tag;
     message.className = 'event-message'; message.textContent = text;
+    // Full details stay available without turning one record into two rows.
+    row.title = time.textContent + ' ' + tag + ' ' + detail;
     row.append(time, code, message); root.append(row);
     const addedHeight = root.scrollHeight - oldHeight;
-    while (root.children.length > 48) root.firstElementChild.remove();
+    while (root.children.length > 96) root.firstElementChild.remove();
     this.entries++;
     this.following = tail;
     if (tail) this.scrollToEnd();
@@ -74,44 +77,46 @@ class EventStream {
     const ms = snapshot.elapsedMs, total = BigInt(snapshot.trials);
     if (!this.announced && snapshot.candidateCount) {
       this.announced = true;
-      this.log('SPACE', BogoNumbers.compactInteger(BigInt(snapshot.candidateCount)) + ' eligible integers');
-      this.lastAt = ms; return;
+      this.log('SPACE', BogoNumbers.compactInteger(BigInt(snapshot.candidateCount)), '',
+        snapshot.candidateCount + ' eligible integers');
+      this.nextAt = ms + this.interval; return;
     }
-    // Four new records per second at most, independent of counter and reels.
-    // Missed intervals are not replayed after pausing or hiding the page.
-    if (ms - this.lastAt < 250) return;
-    this.lastAt = ms;
+    // Twelve records/second on the existing snapshot stream. Advance along a
+    // fixed timeline so frame quantization does not slow the feed to 10 Hz.
+    // Emit at most one record per snapshot; skip missed slots, never replay
+    // a backlog after pause, a hidden tab or a slow frame.
+    if (ms < this.nextAt) return;
+    this.nextAt += (Math.floor((ms - this.nextAt) / this.interval) + 1) * this.interval;
     const workers = snapshot.workers || [];
     const active = workers.filter(worker => worker.state === 'running');
     switch (this.step++ % 6) {
       case 0: {
         const delta = total - this.lastWork; this.lastWork = total;
-        this.log('TEST', '+' + this.nf.format(delta) + ' evaluated'); break;
+        this.log('TEST', '+' + BogoNumbers.compactInteger(delta), '',
+          '+' + this.nf.format(delta) + ' evaluated'); break;
       }
       case 1:
         this.log('RATE', this.rate(snapshot.rate)); break;
       case 2: {
         const lane = active.length ? active[this.worker++ % active.length] : workers[0];
         if (lane) this.log('WORKER', 'W' + (lane.index + 1) + ' · ' + this.rate(lane.rate));
-        else this.log('POOL', 'Waiting for first worker report');
+        else this.log('POOL', 'Awaiting data');
         break;
       }
       case 3: {
         const bytes = workers.reduce((sum, worker) => sum + (worker.memoryBytes || 0), 0);
-        this.log('MEMORY', (bytes / 1048576).toFixed(1) + ' MiB · ' + active.length + '/' + workers.length + ' workers'); break;
+        this.log('MEMORY', (bytes / 1048576).toFixed(1) + ' MiB', '',
+          (bytes / 1048576).toFixed(1) + ' MiB · ' + active.length + '/' + workers.length + ' workers'); break;
       }
       case 4:
-        this.log('TOTAL', this.nf.format(total) + ' completed'); break;
+        this.log('TOTAL', BogoNumbers.compactInteger(total), '', this.nf.format(total) + ' completed'); break;
       case 5: {
-        const ticks = Math.floor(Math.max(0, ms) / 10);
-        const minutes = Math.floor(ticks / 6000);
-        const clock = String(minutes).padStart(2, '0') + ':' +
-          String(Math.floor(ticks / 100) % 60).padStart(2, '0') + '.' + String(ticks % 100).padStart(2, '0');
-        this.log('TIME', clock + ' active'); break;
+        const elapsed = BogoNumbers.duration(ms);
+        this.log('TIME', elapsed.text + ' ' + elapsed.unit); break;
       }
     }
   }
   reset() {
-    this.lastAt = 0; this.lastWork = 0n; this.step = 0; this.worker = 0; this.announced = false;
+    this.nextAt = 0; this.lastWork = 0n; this.step = 0; this.worker = 0; this.announced = false;
   }
 }
