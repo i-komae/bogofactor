@@ -83,12 +83,13 @@ class WorkerMeters {
       const track = document.createElement('i'); track.className = 'lane-track'; track.setAttribute('aria-hidden', 'true');
       const fill = document.createElement('b'); fill.className = 'lane-fill';
       const glint = document.createElement('em'); glint.className = 'lane-glint';
+      const wrappedGlint = glint.cloneNode();
       const output = document.createElement('output');
-      track.append(fill, glint); row.append(name, track, output); this.root.append(row);
+      track.append(fill, glint, wrappedGlint); row.append(name, track, output); this.root.append(row);
       // All lights start at the origin. Different measured endpoints alone
       // produce different lap times; rates and lengths are never randomized.
-      const lane = { row, track, fill, glint, metric: new RollingMetric(output),
-        length: 0, target: 0, width: 0, pulseX: 0, atEnd: false, firstPulse: true, laps: 0, state: 'idle',
+      const lane = { row, track, fill, glint, wrappedGlint, metric: new RollingMetric(output),
+        length: 0, target: 0, width: 0, pulseX: 0, firstPulse: true, laps: 0, state: 'idle',
         pulseLeft: 0, pulseWidth: 0, labelAt: -Infinity };
       this.lanes.push(lane);
     }
@@ -132,31 +133,37 @@ class WorkerMeters {
   pulseGeometry(lane) {
     const end = Math.max(0, lane.width * lane.length);
     const width = Math.min(end, Math.max(10, Math.min(22, lane.width * .18)));
-    return { end, width, travel: Math.max(0, end - width) };
+    return { end, width };
   }
   advancePulse(lane, dt) {
-    const { travel } = this.pulseGeometry(lane);
-    if (travel <= 0) { lane.pulseX = 0; return; }
+    const { end } = this.pulseGeometry(lane);
+    if (end <= 0) { lane.pulseX = 0; return; }
     // Show the origin first, including when measurements become available late.
     if (lane.firstPulse) { lane.firstPulse = false; lane.pulseX = 0; return; }
-    // Touch the actual endpoint for one frame, then restart at the origin.
-    // No reverse journey and no continuation into the empty part of the track.
-    if (lane.atEnd) {
-      lane.pulseX = 0; lane.atEnd = false; lane.laps++; return;
-    }
-    lane.pulseX = Math.min(travel, lane.pulseX + this.pulseSpeed * dt);
-    if (lane.pulseX >= travel) lane.atEnd = true;
+    // The displayed fill is a loop. Preserve overshoot instead of holding at
+    // the endpoint or teleporting the whole highlight back to the origin.
+    const next = lane.pulseX + this.pulseSpeed * dt;
+    lane.laps += Math.floor(next / end);
+    lane.pulseX = next % end;
   }
   paint(lane) {
-    const { end, width, travel } = this.pulseGeometry(lane);
-    // A viewport resize or a shrinking fill may move the endpoint toward us.
-    // Clip to that displayed endpoint; the next frame starts a new lap.
-    if (lane.pulseX > travel) { lane.pulseX = travel; lane.atEnd = travel > 0; }
-    const left = Math.max(0, lane.pulseX);
+    const { end, width } = this.pulseGeometry(lane);
+    // Keep the loop bounded by the actual fill, including after a resize.
+    lane.pulseX = end > 0 ? lane.pulseX % end : 0;
+    const left = lane.pulseX;
+    const overflow = Math.min(width, Math.max(0, left + width - end));
+    const opacity = this.enabled && lane.state === 'running' ? Math.min(1, end / 14).toFixed(3) : '0';
     lane.fill.style.transform = `scaleX(${lane.length.toFixed(6)})`;
+    // Both pieces retain the full gradient width. Clip complementary portions
+    // so the portion leaving the right edge emerges unchanged at the left.
     lane.glint.style.width = width.toFixed(3) + 'px';
     lane.glint.style.transform = `translateX(${left.toFixed(3)}px)`;
-    lane.glint.style.opacity = this.enabled && lane.state === 'running' ? Math.min(1, end / 14).toFixed(3) : '0';
+    lane.glint.style.clipPath = `inset(0 ${overflow.toFixed(3)}px 0 0)`;
+    lane.glint.style.opacity = opacity;
+    lane.wrappedGlint.style.width = width.toFixed(3) + 'px';
+    lane.wrappedGlint.style.transform = `translateX(${(left - end).toFixed(3)}px)`;
+    lane.wrappedGlint.style.clipPath = `inset(0 0 0 ${(width - overflow).toFixed(3)}px)`;
+    lane.wrappedGlint.style.opacity = opacity;
     lane.pulseLeft = left; lane.pulseWidth = width;
   }
   reset() { this.rebuild(0); }
@@ -164,7 +171,7 @@ class WorkerMeters {
     return { measurements: this.measurements, frames: this.frames, active: !!this.raf,
       lanes: this.lanes.map(lane => ({ state: lane.state, target: lane.target, length: lane.length,
         width: lane.width, pulseLeft: lane.pulseLeft, pulseWidth: lane.pulseWidth,
-        laps: lane.laps, atEnd: lane.atEnd, speed: this.pulseSpeed, meter: lane.metric.diagnostics })) };
+        laps: lane.laps, speed: this.pulseSpeed, meter: lane.metric.diagnostics })) };
   }
 }
 
