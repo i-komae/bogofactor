@@ -146,6 +146,13 @@
     $('workers').disabled = busy();
     $('view-live').disabled = !hasRun;
     $('mobile-main-label').textContent = $('start-label').textContent;
+    const action = running || status === 'pausing' ? 'pause' : 'play';
+    for (const button of [$('start'), $('mobile-main')]) {
+      if (button.dataset.action !== action) {
+        button.dataset.action = action;
+        button.querySelector('.action-icon path').setAttribute('d', action === 'pause' ? 'M7 4V16M13 4V16' : 'M7 4L15 10L7 16Z');
+      }
+    }
     $('mobile-main').disabled = $('start').disabled;
     $('mobile-main').hidden = !busy();
     $('mobile-stop').hidden = !busy();

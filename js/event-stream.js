@@ -5,6 +5,8 @@
 class EventStream {
   constructor(root) {
     this.root = root;
+    this.preview = document.getElementById('core-activity');
+    this.mobile = matchMedia('(max-width:760px), (pointer:coarse) and (max-height:590px)');
     this.seen = new Map();
     this.recentStyles = [];
     this.pending = [];
@@ -46,6 +48,12 @@ class EventStream {
     row.append(badge, body);
     const top = this.following ? 0 : root.scrollTop;
     root.append(row);
+    if (this.preview && this.mobile.matches && !document.hidden) {
+      const previewRow = row.cloneNode(true);
+      previewRow.removeAttribute('title');
+      this.preview.append(previewRow);
+      while (this.preview.children.length > 2) this.preview.firstElementChild.remove();
+    }
     let removed = 0;
     while (root.children.length > 96) { root.firstElementChild.remove(); removed++; }
     if (this.following) root.scrollTop = 1e7;
@@ -158,6 +166,7 @@ class EventStream {
     this.nextAt = ms + (this.pending.length ? 12 + Math.random() * 25 : 35 + Math.random() * 90);
   }
   reset() {
+    this.preview?.replaceChildren();
     this.seen.clear(); this.recentStyles.length = 0; this.pending.length = 0;
     this.worker = 0; this.nextAt = 0; this.announced = false;
   }

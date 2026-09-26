@@ -386,7 +386,16 @@ const BogoVisual = (() => {
     const resultLabels = { found: 'FACTOR\nLOCKED', prime: 'PRIME\nINPUT', probable: 'PROBABLE\nPRIME', capped: 'LIMIT\nREACHED', stopped: 'SESSION\nSTOPPED', error: 'SYSTEM\nFAULT', interrupted: 'SESSION\nCLOSED' };
     $('result-heading').textContent = resultLabels[next] || 'AWAITING\nRESULT';
     $('verification').textContent = next === 'found' ? 'VERIFIED / d × q = N' : 'N = d × q';
-    $('empty-message').textContent = next === 'prime' ? 'No non-trivial factor exists.' : next === 'probable' ? 'Primality screen passed.' : next === 'screening' ? 'Screening the input before sampling.' : 'No non-trivial divisor found.';
+    const resultMessages = {
+      boot: 'Awaiting a search.', idle: 'Awaiting a search.',
+      screening: 'Checking the input.', running: 'Searching for a non-trivial divisor.',
+      pausing: 'Pausing the search…', paused: 'Search paused.', resuming: 'Resuming the search…',
+      stopping: 'Stopping the search…', stopped: 'Stopped before a divisor was found.',
+      prime: 'No non-trivial divisor exists.', probable: 'Primality screen passed.',
+      capped: 'No divisor found within the trial limit.', error: 'Search could not complete.',
+      interrupted: 'Search interrupted.', 'counter-limit': 'Counter capacity reached without a divisor.'
+    };
+    $('empty-message').textContent = resultMessages[next] || '';
     const messages = {
       screening: ['CHECK', 'primality screen started'], running: ['RUN', previous === 'resuming' || previous === 'paused' ? 'session resumed' : 'sampling eligible divisors'],
       paused: ['HOLD', 'state preserved'], stopped: ['STOP', 'session closed'], found: ['HIT', 'd × q = N verified'],
@@ -401,6 +410,12 @@ const BogoVisual = (() => {
     if (next === 'running' && previous !== 'running') {
       body.classList.add('start-effect'); startTimer = setTimeout(() => body.classList.remove('start-effect'), 1000);
     } else if (next === 'found') {
+      const divisor = snapshot?.factor?.d || '';
+      const output = $('locked-divisor');
+      // Show only actual result digits, never random stand-ins. Long results
+      // remain complete in the result panel and share card below.
+      output.textContent = divisor.length > 60 ? divisor.slice(0, 28) + '…' + divisor.slice(-28) : divisor;
+      output.classList.toggle('long', divisor.length > 24);
       clearTimeout(hitTimer); body.classList.add('hit-effect'); hitTimer = setTimeout(() => body.classList.remove('hit-effect'), 2700);
     }
     syncMotion();
@@ -446,6 +461,7 @@ const BogoVisual = (() => {
     $('rate-path').setAttribute('d', 'M0 70H260'); $('rate-area').setAttribute('d', 'M0 76H260Z'); peakDisplay?.reset();
     $('rate-chart').setAttribute('aria-label', 'Measured throughput history; no data yet');
     clearTimeout(hitTimer); body.classList.remove('hit-effect');
+    $('locked-divisor').textContent = '';
   }
   $('fx-toggle').addEventListener('click', () => {
     if (reduce.matches) { toast('Reduced motion is enabled in your system settings.'); return; }
@@ -476,10 +492,22 @@ const BogoVisual = (() => {
   setTimeout(dismissIntro, 1500);
   document.addEventListener('pointerdown', dismissIntro, { once: true });
   document.addEventListener('keydown', dismissIntro, { once: true });
-  for (const panel of document.querySelectorAll('.panel.core, .throughput-panel, .panel.payload, .panel.output')) {
+  // The diagonal covers each rectangular mask at every angle. Update texture
+  // size only when layout changes, not during animation or counter updates.
+  const edgePanels = Array.from(document.querySelectorAll('.panel.core, .throughput-panel, .panel.payload, .panel.output'));
+  const sizeEdge = panel => {
+    const size = Math.ceil(Math.hypot(panel.clientWidth, panel.clientHeight)) + 4;
+    panel.lastElementChild.style.setProperty('--rim-size', size + 'px');
+  };
+  for (const panel of edgePanels) {
     const edge = document.createElement('span'); edge.className = 'edge-light';
     edge.setAttribute('aria-hidden', 'true'); panel.append(edge);
+    sizeEdge(panel);
   }
+  if (window.ResizeObserver) {
+    const edgeObserver = new ResizeObserver(entries => { for (const entry of entries) sizeEdge(entry.target); });
+    for (const panel of edgePanels) edgeObserver.observe(panel);
+  } else addEventListener('resize', () => edgePanels.forEach(sizeEdge));
   colors(); size(); syncMotion(); log('BOOT', 'local engine initializing');
   return {
     state: change, snapshot: update, input, reset, toast,

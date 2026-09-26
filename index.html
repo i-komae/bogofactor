@@ -8,6 +8,25 @@
     <meta name="theme-color" content="#070e18" media="(prefers-color-scheme: dark)"/>
     <meta name="description" content="Find one non-trivial factor by random sampling. Real arithmetic, excessive drama."/>
     <title>BOGO / FACTOR — Entropy Terminal</title>
+    <link rel="canonical" href="https://i-komae.github.io/bogofactor/"/>
+    <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48"/>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" sizes="any"/>
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" sizes="180x180"/>
+    <meta property="og:type" content="website"/>
+    <meta property="og:site_name" content="BOGO / FACTOR"/>
+    <meta property="og:title" content="BOGO / FACTOR — O(1). IF LUCKY."/>
+    <meta property="og:description" content="Find one non-trivial factor. Leave the rest to luck."/>
+    <meta property="og:url" content="https://i-komae.github.io/bogofactor/"/>
+    <meta property="og:image" content="https://i-komae.github.io/bogofactor/apple-touch-icon.png"/>
+    <meta property="og:image:type" content="image/png"/>
+    <meta property="og:image:width" content="180"/>
+    <meta property="og:image:height" content="180"/>
+    <meta property="og:image:alt" content="BOGO / FACTOR: three slanted cyan bars on a dark background."/>
+    <meta name="twitter:card" content="summary"/>
+    <meta name="twitter:title" content="BOGO / FACTOR — O(1). IF LUCKY."/>
+    <meta name="twitter:description" content="Find one non-trivial factor. Leave the rest to luck."/>
+    <meta name="twitter:image" content="https://i-komae.github.io/bogofactor/apple-touch-icon.png"/>
+    <meta name="twitter:image:alt" content="BOGO / FACTOR: three slanted cyan bars on a dark background."/>
     <link rel="stylesheet" href="css/terminal.css"/>
     <link rel="stylesheet" href="css/share.css"/>
     <link rel="stylesheet" href="css/interface.css"/>
@@ -105,7 +124,7 @@
               </div>
             </div>
             <div class="actions">
-              <button type="submit" id="start" class="primary" disabled=""><span class="button-bracket" aria-hidden="true">[</span><span id="start-label">INITIALIZING</span><span class="button-arrow" aria-hidden="true">↗</span></button>
+              <button type="submit" id="start" class="primary" disabled=""><span id="start-label">INITIALIZING</span><svg class="action-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 4L15 10L7 16Z"></path></svg></button>
               <button type="button" id="stop" class="abort" hidden="">ABORT</button>
             </div>
             <p class="key-hint"><span>⌘ / CTRL + ENTER</span><span>RUN / PAUSE</span></p>
@@ -124,6 +143,7 @@
           </div>
           <div class="core-view" id="core-view">
             <canvas id="reactor" aria-hidden="true"></canvas>
+            <div class="core-activity" id="core-activity" aria-hidden="true"></div>
             <div class="core-state" aria-hidden="true">
               <strong id="core-word">STANDBY</strong>
               <span id="core-sub">AWAITING INPUT</span>
@@ -131,6 +151,7 @@
             <div class="lock-banner" id="lock-banner" aria-hidden="true">
               <span>NON-TRIVIAL DIVISOR</span>
               <b>FACTOR LOCKED</b>
+              <span id="locked-divisor" class="locked-divisor"></span>
             </div>
           </div>
           <div class="trial-block">
@@ -164,7 +185,7 @@
             </div>
             <div class="telemetry-body">
               <div class="telemetry-label">
-                <span>TRIALS / SECOND</span>
+                <span title="Highest measured sample in the displayed history">RECENT PEAK</span>
                 <span id="chart-peak">—</span>
               </div>
               <svg id="rate-chart" viewBox="0 0 260 76" role="img" aria-label="Measured throughput history; no data yet"><path class="chart-grid" d="M0 12H260M0 38H260M0 64H260M52 0V76M104 0V76M156 0V76M208 0V76"></path><path id="rate-area" d="M0 76H260Z"></path><path id="rate-path" d="M0 70H260"></path></svg>
@@ -213,7 +234,7 @@
           <div class="output-body" tabindex="0" aria-label="Complete divisor search result">
             <div id="factor-empty" class="factor-empty">
               <span class="empty-dashes" aria-hidden="true">— — —</span>
-              <span id="empty-message">No non-trivial divisor found.</span>
+              <span id="empty-message">Awaiting a search.</span>
             </div>
             <div id="factor-values" class="factor-values" hidden="">
               <span id="factor-d"></span>
@@ -227,7 +248,7 @@
         </section>
       </div>
       <div class="mobile-dock">
-        <button id="mobile-main" type="button" class="primary"><span id="mobile-main-label">PAUSE SEARCH</span><span aria-hidden="true">Ⅱ</span></button>
+        <button id="mobile-main" type="button" class="primary"><span id="mobile-main-label">PAUSE SEARCH</span><svg class="action-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 4L15 10L7 16Z"></path></svg></button>
         <button id="mobile-stop" class="abort" type="button">ABORT</button>
         <button id="mobile-new" class="primary" type="button" hidden="">NEW TARGET <span aria-hidden="true">↗</span></button>
       </div>

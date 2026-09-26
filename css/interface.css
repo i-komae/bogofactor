@@ -103,3 +103,57 @@ body[data-suspended=true] .title-cursor { animation-play-state: paused; }
 @keyframes trace-in { from { opacity: .35; transform: translateX(3px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .event.trace-line { animation: none !important; } }
 body[data-fx=quiet] .event.trace-line { animation: none !important; }
+
+/* Both primary measurements align to their units on the same trailing edge. */
+.stats dt { text-align: right; }
+.stats dd { justify-content: flex-end; }
+#elapsed { margin-left: auto; }
+/* Buttons describe their next action consistently on desktop and mobile. */
+.primary .action-icon {
+  width: 18px; height: 18px; flex: 0 0 18px;
+  fill: none; stroke: currentColor; stroke-width: 1.6;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+/* Never cross-fade two sets of central text through one another. */
+body[data-fx=full].hit-effect .core-state { visibility: hidden; }
+.lock-banner .locked-divisor {
+  display: block;
+  max-width: calc(100% - 28px);
+  margin: 12px 14px 0;
+  color: var(--bright);
+  font: 20px/1.35 var(--mono);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  text-align: center;
+  letter-spacing: .04em;
+}
+.lock-banner .locked-divisor.long { font-size: 13px; }
+body[data-fx=full].hit-effect .locked-divisor {
+  animation: divisor-reveal 550ms 120ms ease-out both;
+}
+@keyframes divisor-reveal { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  body[data-fx=full].hit-effect .core-state { visibility: visible; }
+}
+/* A small excerpt of the same real feed, not a second generator. */
+.core-activity { display: none; }
+@media (max-width:760px), (pointer:coarse) and (max-height:590px) {
+  .core-activity {
+    display: flex;
+    position: absolute;
+    bottom: 8px; left: 12px; right: 12px;
+    max-height: 36px;
+    flex-direction: column; justify-content: flex-end;
+    overflow: hidden;
+    pointer-events: none;
+    font: 9px/1.65 var(--mono);
+    background: linear-gradient(90deg, var(--panel), transparent);
+  }
+  .core-activity .event { flex: 0 0 auto; padding: 0; font-size: 9px; animation: none; }
+  .core-activity .event:first-child { opacity: .55; }
+  .core-activity .event:last-child { opacity: .85; }
+  body.hit-effect .core-activity { visibility: hidden; }
+}
+@media (max-height:520px) {
+  .core-activity { display: none; }
+}
