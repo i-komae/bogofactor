@@ -46,11 +46,9 @@ const BogoWorker = (() => {
       const found = engine.get_found();
       const d = BOGO.read(engine, engine.ptr_divisor(), found || j.divisorWords.length);
       if (d < 2n || d > j.root) throw Error('Sampled divisor is outside the search range.');
-      // Only a sparse, already completed test is rechecked for the log. This
-      // never draws another candidate or increments the engine trial counter.
-      const remainder = j.n % d;
-      if ((remainder === 0n) !== !!found) throw Error('Sampled test verification failed.');
-      j.sample = { trial: String(trial), divisor: String(d), remainder: String(remainder),
+      // The completed engine verdict is enough for the visual trace. Never
+      // repeat big-integer division solely to produce decorative output.
+      j.sample = { trial: String(trial), divisor: String(d), hit: !!found,
         fromTrial: String(j.lastSampleTrial + 1n), tested: String(trial - j.lastSampleTrial) };
       j.lastSampleTrial = trial;
       j.samplePending = true;

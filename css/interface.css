@@ -85,3 +85,21 @@ textarea.long { font-size: 13px; }
 }
 body[data-fx=quiet] .title-cursor, body[data-fx=quiet] .event { animation: none; opacity: 1; }
 body[data-suspended=true] .title-cursor { animation-play-state: paused; }
+
+/* Variable-length, colour-coded test records. Each stays exactly one row. */
+.event-log { padding: 10px 9px; scrollbar-gutter: stable; }
+.event.trace-line { grid-template-columns: 11px minmax(0, 1fr); gap: 4px;
+  height: 18px; min-height: 18px; line-height: 18px; padding: 0;
+  animation: trace-in 75ms ease-out both; }
+.trace-line .trace-mark { font: 10px/18px var(--mono); color: var(--muted); overflow: visible; }
+.trace-line .event-message { font: 11px/18px var(--mono); letter-spacing: 0; }
+.token-label { color: var(--accent); }
+.token-worker { color: var(--secondary); }
+.token-literal, .token-hex { color: var(--ink); }
+.token-verdict { color: var(--amber); }
+.token-op { color: var(--accent); }
+.token-dim { color: var(--muted); }
+.token-hit { color: var(--success); }
+@keyframes trace-in { from { opacity: .35; transform: translateX(3px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .event.trace-line { animation: none !important; } }
+body[data-fx=quiet] .event.trace-line { animation: none !important; }

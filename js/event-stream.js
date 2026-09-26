@@ -1,125 +1,169 @@
 'use strict';
-/** A bounded trace of completed divisor tests, not a carousel of dashboard
- * metrics. Sparse Worker samples retain exact trial IDs and remainders. */
+/** Presentation-only trace. Completed tests supply all candidate data. The
+ * independent editorial RNG chooses layouts and pacing, never search values.
+ * No complete trial history, frame-by-frame arithmetic, or background timers. */
 class EventStream {
   constructor(root) {
     this.root = root;
-    this.nextAt = 0;
-    this.interval = 1000 / 12;
     this.seen = new Map();
-    this.sampleRows = 0;
-    this.pendingBatch = null;
+    this.recentStyles = [];
+    this.pending = [];
     this.worker = 0;
-    this.announced = false;
-    this.scrollFrame = 0;
-    this.following = true;
+    this.nextAt = 0;
     this.entries = 0;
-    this.reduce = matchMedia('(prefers-reduced-motion: reduce)');
-    const stopFollowing = () => { this.cancelScroll(); this.following = false; };
-    root.addEventListener('wheel', stopFollowing, { passive: true });
-    root.addEventListener('touchstart', stopFollowing, { passive: true });
-    root.addEventListener('pointerdown', stopFollowing);
-    root.addEventListener('keydown', event => {
-      if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) stopFollowing();
-    });
-  }
-  quiet() {
-    return this.reduce.matches || document.body.dataset.fx === 'quiet' || document.hidden;
-  }
-  cancelScroll() {
-    if (this.scrollFrame) cancelAnimationFrame(this.scrollFrame);
+    this.groups = 0;
+    this.styles = new Uint32Array(10);
+    this.timings = [];
+    this.renderMs = 0;
+    this.announced = false;
+    this.following = true;
     this.scrollFrame = 0;
+    this.reduce = matchMedia('(prefers-reduced-motion: reduce)');
+    const hold = () => { this.following = false; };
+    root.addEventListener('wheel', hold, { passive: true });
+    root.addEventListener('touchstart', hold, { passive: true });
+    root.addEventListener('pointerdown', hold);
+    root.addEventListener('keydown', e => {
+      if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(e.key)) hold();
+    });
+    root.addEventListener('scroll', () => {
+      this.following = root.scrollHeight - root.scrollTop - root.clientHeight < 5;
+    }, { passive: true });
   }
-  scrollToEnd() {
-    this.cancelScroll();
-    const from = this.root.scrollTop, end = this.root.scrollHeight - this.root.clientHeight;
-    if (this.quiet() || this.root.clientHeight === 0 || end <= from) {
-      this.root.scrollTop = end; return;
+  quiet() { return this.reduce.matches || document.body.dataset.fx === 'quiet' || document.hidden; }
+  cancelScroll() { this.pending.length = 0; }
+  line(mark, tokens, level = '', detail = '') {
+    const t = performance.now(), root = this.root;
+    const row = document.createElement('div');
+    row.className = 'event trace-line'; row.dataset.level = level;
+    row.title = detail;
+    const badge = document.createElement('b'); badge.className = 'trace-mark'; badge.textContent = mark;
+    const body = document.createElement('span'); body.className = 'event-message';
+    for (const [kind, text] of tokens) {
+      const span = document.createElement('span'); span.className = 'token-' + kind;
+      span.textContent = text; body.append(span);
     }
-    const start = performance.now();
-    const scroll = now => {
-      this.scrollFrame = 0;
-      const t = Math.min(1, Math.max(0, (now - start) / 70));
-      this.root.scrollTop = from + (end - from) * (1 - (1 - t) ** 3);
-      if (t < 1 && !this.quiet()) this.scrollFrame = requestAnimationFrame(scroll);
-      else this.root.scrollTop = end;
-    };
-    this.scrollFrame = requestAnimationFrame(scroll);
+    row.append(badge, body);
+    const top = this.following ? 0 : root.scrollTop;
+    root.append(row);
+    let removed = 0;
+    while (root.children.length > 96) { root.firstElementChild.remove(); removed++; }
+    if (this.following) root.scrollTop = 1e7;
+    else if (removed) root.scrollTop = Math.max(0, top - removed * 18);
+    this.entries++;
+    this.timings.push(t); if (this.timings.length > 192) this.timings.shift();
+    this.renderMs += performance.now() - t;
   }
   log(tag, text, level = '', detail = text) {
-    const root = this.root;
-    const tail = this.following || root.scrollHeight - root.scrollTop - root.clientHeight <= 12;
-    const oldTop = root.scrollTop, oldHeight = root.scrollHeight;
-    this.cancelScroll();
-    const row = document.createElement('div'); row.className = 'event'; row.dataset.level = level;
-    const time = document.createElement('time'), code = document.createElement('b'), message = document.createElement('span');
-    const now = new Date(); time.dateTime = now.toISOString();
-    time.textContent = now.toLocaleTimeString('en-GB', { hour12: false });
-    code.textContent = tag;
-    message.className = 'event-message'; message.textContent = text;
-    // Full details stay available without turning one record into two rows.
-    row.title = time.textContent + ' ' + tag + ' ' + detail;
-    row.append(time, code, message); root.append(row);
-    const addedHeight = root.scrollHeight - oldHeight;
-    while (root.children.length > 96) root.firstElementChild.remove();
-    this.entries++;
-    this.following = tail;
-    if (tail) this.scrollToEnd();
-    else root.scrollTop = Math.max(0, oldTop - (oldHeight + addedHeight - root.scrollHeight));
+    if (['HOLD','STOP','HIT','LIMIT','FAULT'].includes(tag)) this.pending.length = 0;
+    this.line(level === 'warn' ? '!' : level === 'hit' ? '✓' : '›',
+      [['label', tag.toLowerCase()], ['dim', '  '], ['text', text]], level, detail);
   }
-  brief(value) {
-    const text = String(value);
-    return text.length <= 7 ? text : text.slice(0, 3) + '…' + text.slice(-3);
+  short(s, n = 15) {
+    s = String(s); return s.length <= n ? s : s.slice(0, n - 6) + '…' + s.slice(-5);
+  }
+  group(lane) {
+    const s = lane.sample, who = 'w' + (lane.index + 1);
+    const d = BigInt(s.divisor), hex = d.toString(16).toUpperCase();
+    const value = '0x' + this.short(hex, 16), decimal = this.short(s.divisor, 18);
+    const hit = !!s.hit || s.remainder === '0';
+    const detail = `Worker ${lane.index + 1}; completed trial ${s.trial}; d = ${s.divisor}; ` +
+      (hit ? 'divides N exactly.' : 'does not divide N.') +
+      ` Completed interval ${s.fromTrial}–${s.trial}: ${s.tested} trials.`;
+    const row = (mark, ...tokens) => ({ mark, tokens, detail, level: hit ? 'hit' : '' });
+    if (hit) return [
+      row('✓', ['worker', who], ['hit', '  DIVISOR FOUND']),
+      row('│', ['dim', '  d = '], ['literal', decimal]),
+      row('└', ['hit', '  N mod d = 0'])
+    ];
+    // Mix views of real completed records, not scripts or invented operations.
+    // Avoid a repeating layout cycle; the choice never changes search state.
+    const choices = Array.from({ length: 10 }, (_, i) => i).filter(i => !this.recentStyles.includes(i));
+    const mode = choices[Math.floor(Math.random() * choices.length)];
+    this.recentStyles.push(mode); if (this.recentStyles.length > 3) this.recentStyles.shift();
+    this.styles[mode]++; this.groups++;
+    const num = x => BogoNumbers.compactInteger(BigInt(x));
+    const trial = '#' + this.short(s.trial, 12);
+    switch (mode) {
+      case 0:
+        return [row('›', ['worker', who], ['label', '  TEST '], ['literal', trial]),
+          row('└', ['dim', 'd = '], ['literal', decimal], ['verdict', '  rejected'])];
+      case 1: {
+        // A real hexadecimal excerpt, with its digit offset (from the most
+        // significant hex digit) shown explicitly. No memory addresses or data
+        // outside the sampled candidate are fabricated.
+        const wordCount = Math.ceil(hex.length / 4);
+        const count = Math.min(wordCount, 4 + Math.floor(Math.random() * 9));
+        const startWord = Math.floor(Math.random() * Math.max(1, wordCount - count + 1));
+        const start = startWord * 4, end = Math.min(hex.length, (startWord + count) * 4);
+        const rows = [row('›', ['worker', who], ['label', '  d / HEX '],
+          ['dim', start + '–' + (end - 1)])];
+        for (let offset = start; offset < end; offset += 16) {
+          const segment = hex.slice(offset, Math.min(offset + 16, end));
+          rows.push(row(offset + 16 >= end ? '└' : '│', ['dim', '  '],
+            ['hex', segment.match(/.{1,4}/g).join(' ')]));
+        }
+        return rows;
+      }
+      case 2:
+        return [row('›', ['worker', who], ['dim', '  d = '], ['literal', decimal]),
+          row('└', ['dim', '  N mod d '], ['verdict', '≠ 0'])];
+      case 3:
+        return [row('·', ['worker', who], ['dim', '  '], ['literal', num(s.tested)], ['verdict', ' rejected']),
+          row('└', ['dim', '  #' + this.short(s.fromTrial, 10) + ' → #' + this.short(s.trial, 10)])];
+      case 4:
+        return [row('›', ['worker', who], ['dim', '  d = '], ['literal', value]),
+          row('└', ['verdict', '  REJECTED'], ['dim', ' / '], ['literal', trial])];
+      case 5:
+        return [row('›', ['worker', who], ['dim', '  '], ['literal', decimal], ['verdict', '  reject'])];
+      case 6:
+        return [row('·', ['worker', who], ['label', '  TEST '], ['literal', trial]),
+          row('│', ['dim', '  d / '], ['literal', d.toString(2).length + ' bits']),
+          row('└', ['dim', '  '], ['literal', value])];
+      case 7:
+        return [row('›', ['worker', who], ['label', '  DIVISIBILITY']),
+          row('│', ['dim', '  d = '], ['literal', value]),
+          row('└', ['verdict', '  NOT A DIVISOR'])];
+      case 8:
+        return [row('›', ['worker', who], ['dim', '  '], ['literal', value]),
+          row('└', ['verdict', '  NONZERO RESIDUE'])];
+      case 9:
+        return [row('·', ['worker', who], ['label', '  COMPLETED INTERVAL']),
+          row('│', ['dim', '  #' + this.short(s.fromTrial, 10) + ' → #' + this.short(s.trial, 10)]),
+          row('└', ['literal', '  ' + num(s.tested)], ['dim', ' tests / '], ['verdict', '0 hits'])];
+    }
   }
   update(snapshot) {
     if (snapshot.status !== 'running' || document.hidden) return;
     const ms = snapshot.elapsedMs, workers = snapshot.workers || [];
-    if (!this.announced && snapshot.candidateCount) {
+    if (!this.announced) {
       this.announced = true;
-      const root = BOGO.sqrt(BigInt(snapshot.n));
-      this.log('CHECK', 'Composite confirmed', '', 'The primality screen returned composite; divisor sampling is now running.');
-      this.log('BOUND', '2 ≤ d ≤ ' + this.brief(root), '',
-        'Draw d uniformly from eligible integers between 2 and ' + root + ', with replacement.');
-      this.log('SIEVE', '2·3·5·7·11·13·17', '',
-        'Exclude multiples of these primes, but retain the primes themselves as candidate divisors.');
-      this.log('POOL', workers.length + ' samplers started', '',
-        workers.length + ' independent Worker samplers; first verified factor stops the pool.');
-      this.nextAt = ms + this.interval;
+      this.log('EXEC', 'divisor search started');
+      this.nextAt = ms + 30;
       return;
     }
     if (ms < this.nextAt) return;
-    // No catch-up bursts and no cycling through static memory/time/rate values.
-    this.nextAt += (Math.floor((ms - this.nextAt) / this.interval) + 1) * this.interval;
-    if (this.pendingBatch) {
-      const { index, sample } = this.pendingBatch;
-      this.pendingBatch = null;
-      this.log('BATCH', 'W' + (index + 1) + ' +' + BogoNumbers.compactInteger(BigInt(sample.tested)) + ' misses', '',
-        'Worker ' + (index + 1) + ': completed trials ' + sample.fromTrial + '–' + sample.trial +
-        '; all ' + sample.tested + ' candidates in this interval failed divisibility.');
-      return;
-    }
-    // Round-robin across fresh samples. Keep only each worker's latest sample;
-    // never print the same completed test twice or invent one to fill a slot.
-    for (let k = 0; k < workers.length; k++) {
-      const i = (this.worker + k) % workers.length, lane = workers[i], sample = lane.sample;
-      if (!sample || this.seen.get(i) === sample.trial) continue;
-      this.worker = (i + 1) % workers.length;
-      this.seen.set(i, sample.trial);
-      const hit = sample.remainder === '0';
-      this.log('W' + (i + 1), 'N%' + this.brief(sample.divisor) + '=' + this.brief(sample.remainder), hit ? 'hit' : '',
-        'Worker ' + (i + 1) + ', completed trial #' + sample.trial + ': ' +
-        snapshot.n + ' mod ' + sample.divisor + ' = ' + sample.remainder +
-        (hit ? '; non-trivial factor verified.' : '; nonzero remainder, candidate rejected.'));
-      // An occasional real rejection interval gives context to the individual
-      // tests. This is a count of attempts, not an exhausted candidate range.
-      if (!hit && ++this.sampleRows % 4 === 0 && BigInt(sample.tested) > 1n) {
-        this.pendingBatch = { index: i, sample };
+    if (!this.pending.length) {
+      for (let k = 0; k < workers.length; k++) {
+        const i = (this.worker + k) % workers.length, lane = workers[i], s = lane.sample;
+        if (!s || this.seen.get(i) === s.trial) continue;
+        this.seen.set(i, s.trial); this.worker = (i + 1) % workers.length;
+        this.pending = this.group(lane); break;
       }
-      return;
     }
+    const item = this.pending.shift();
+    if (!item) { this.nextAt = ms + 25; return; }
+    this.line(item.mark, item.tokens, item.level, item.detail);
+    // Short bursts alternate with breathing spaces; no replay of missed slots.
+    this.nextAt = ms + (this.pending.length ? 12 + Math.random() * 25 : 35 + Math.random() * 90);
   }
   reset() {
-    this.nextAt = 0; this.seen.clear(); this.sampleRows = 0; this.pendingBatch = null;
-    this.worker = 0; this.announced = false; this.cancelScroll();
+    this.seen.clear(); this.recentStyles.length = 0; this.pending.length = 0;
+    this.worker = 0; this.nextAt = 0; this.announced = false;
+  }
+  get diagnostics() {
+    return { entries: this.entries, groups: this.groups, styles: Array.from(this.styles),
+      retained: this.root.children.length, pending: this.pending.length, updateTimes: this.timings,
+      totalRenderMs: this.renderMs };
   }
 }

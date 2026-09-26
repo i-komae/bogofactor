@@ -1,6 +1,5 @@
 'use strict';
 // Exact products. No preset factors are provided to the sampler.
-// RSA-260: original RSA Challenge list; n mod 991889 = 327430.
 // https://www.ontko.com/pub/rayo/primes/rsa_fact.html
 const PRESETS = Object.freeze([
   {
@@ -56,12 +55,6 @@ const PRESETS = Object.freeze([
     "label": "101 digits",
     "n": "10000000000000000000000000000000000000000000001262800000000000000000000000000000000000000000001884027",
     "group": "Composite examples"
-  },
-  {
-    "id": "rsa260",
-    "label": "RSA-260 · 260 digits",
-    "n": "22112825529529666435281085255026230927612089502470015394413748319128822941402001986512729726569746599085900330031400051170742204560859276357953757185954298838958709229238491006703034124620545784566413664540684214361293017694020846391065875914794251435144458199",
-    "group": "RSA challenges"
   },
   {
     "id": "rsa270",
