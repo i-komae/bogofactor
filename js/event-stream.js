@@ -1,19 +1,19 @@
 'use strict';
-/** Bounded, presentation-only activity feed. Every record is derived from an
- * actual engine event or snapshot; no random statuses or pretend work. */
+/** A bounded trace of completed divisor tests, not a carousel of dashboard
+ * metrics. Sparse Worker samples retain exact trial IDs and remainders. */
 class EventStream {
   constructor(root) {
     this.root = root;
     this.nextAt = 0;
     this.interval = 1000 / 12;
-    this.lastWork = 0n;
-    this.step = 0;
+    this.seen = new Map();
+    this.sampleRows = 0;
+    this.pendingBatch = null;
     this.worker = 0;
     this.announced = false;
     this.scrollFrame = 0;
     this.following = true;
     this.entries = 0;
-    this.nf = new Intl.NumberFormat('en-US');
     this.reduce = matchMedia('(prefers-reduced-motion: reduce)');
     const stopFollowing = () => { this.cancelScroll(); this.following = false; };
     root.addEventListener('wheel', stopFollowing, { passive: true });
@@ -67,56 +67,59 @@ class EventStream {
     if (tail) this.scrollToEnd();
     else root.scrollTop = Math.max(0, oldTop - (oldHeight + addedHeight - root.scrollHeight));
   }
-  rate(value) {
-    if (!Number.isFinite(value)) return '—';
-    const formatted = BogoNumbers.rate(Math.max(0, value));
-    return formatted.text + (formatted.unit ? ' ' + formatted.unit : '');
+  brief(value) {
+    const text = String(value);
+    return text.length <= 7 ? text : text.slice(0, 3) + '…' + text.slice(-3);
   }
   update(snapshot) {
     if (snapshot.status !== 'running' || document.hidden) return;
-    const ms = snapshot.elapsedMs, total = BigInt(snapshot.trials);
+    const ms = snapshot.elapsedMs, workers = snapshot.workers || [];
     if (!this.announced && snapshot.candidateCount) {
       this.announced = true;
-      this.log('SPACE', BogoNumbers.compactInteger(BigInt(snapshot.candidateCount)), '',
-        snapshot.candidateCount + ' eligible integers');
-      this.nextAt = ms + this.interval; return;
+      const root = BOGO.sqrt(BigInt(snapshot.n));
+      this.log('CHECK', 'Composite confirmed', '', 'The primality screen returned composite; divisor sampling is now running.');
+      this.log('BOUND', '2 ≤ d ≤ ' + this.brief(root), '',
+        'Draw d uniformly from eligible integers between 2 and ' + root + ', with replacement.');
+      this.log('SIEVE', '2·3·5·7·11·13·17', '',
+        'Exclude multiples of these primes, but retain the primes themselves as candidate divisors.');
+      this.log('POOL', workers.length + ' samplers started', '',
+        workers.length + ' independent Worker samplers; first verified factor stops the pool.');
+      this.nextAt = ms + this.interval;
+      return;
     }
-    // Twelve records/second on the existing snapshot stream. Advance along a
-    // fixed timeline so frame quantization does not slow the feed to 10 Hz.
-    // Emit at most one record per snapshot; skip missed slots, never replay
-    // a backlog after pause, a hidden tab or a slow frame.
     if (ms < this.nextAt) return;
+    // No catch-up bursts and no cycling through static memory/time/rate values.
     this.nextAt += (Math.floor((ms - this.nextAt) / this.interval) + 1) * this.interval;
-    const workers = snapshot.workers || [];
-    const active = workers.filter(worker => worker.state === 'running');
-    switch (this.step++ % 6) {
-      case 0: {
-        const delta = total - this.lastWork; this.lastWork = total;
-        this.log('TEST', '+' + BogoNumbers.compactInteger(delta), '',
-          '+' + this.nf.format(delta) + ' evaluated'); break;
+    if (this.pendingBatch) {
+      const { index, sample } = this.pendingBatch;
+      this.pendingBatch = null;
+      this.log('BATCH', 'W' + (index + 1) + ' +' + BogoNumbers.compactInteger(BigInt(sample.tested)) + ' misses', '',
+        'Worker ' + (index + 1) + ': completed trials ' + sample.fromTrial + '–' + sample.trial +
+        '; all ' + sample.tested + ' candidates in this interval failed divisibility.');
+      return;
+    }
+    // Round-robin across fresh samples. Keep only each worker's latest sample;
+    // never print the same completed test twice or invent one to fill a slot.
+    for (let k = 0; k < workers.length; k++) {
+      const i = (this.worker + k) % workers.length, lane = workers[i], sample = lane.sample;
+      if (!sample || this.seen.get(i) === sample.trial) continue;
+      this.worker = (i + 1) % workers.length;
+      this.seen.set(i, sample.trial);
+      const hit = sample.remainder === '0';
+      this.log('W' + (i + 1), 'N%' + this.brief(sample.divisor) + '=' + this.brief(sample.remainder), hit ? 'hit' : '',
+        'Worker ' + (i + 1) + ', completed trial #' + sample.trial + ': ' +
+        snapshot.n + ' mod ' + sample.divisor + ' = ' + sample.remainder +
+        (hit ? '; non-trivial factor verified.' : '; nonzero remainder, candidate rejected.'));
+      // An occasional real rejection interval gives context to the individual
+      // tests. This is a count of attempts, not an exhausted candidate range.
+      if (!hit && ++this.sampleRows % 4 === 0 && BigInt(sample.tested) > 1n) {
+        this.pendingBatch = { index: i, sample };
       }
-      case 1:
-        this.log('RATE', this.rate(snapshot.rate)); break;
-      case 2: {
-        const lane = active.length ? active[this.worker++ % active.length] : workers[0];
-        if (lane) this.log('WORKER', 'W' + (lane.index + 1) + ' · ' + this.rate(lane.rate));
-        else this.log('POOL', 'Awaiting data');
-        break;
-      }
-      case 3: {
-        const bytes = workers.reduce((sum, worker) => sum + (worker.memoryBytes || 0), 0);
-        this.log('MEMORY', (bytes / 1048576).toFixed(1) + ' MiB', '',
-          (bytes / 1048576).toFixed(1) + ' MiB · ' + active.length + '/' + workers.length + ' workers'); break;
-      }
-      case 4:
-        this.log('TOTAL', BogoNumbers.compactInteger(total), '', this.nf.format(total) + ' completed'); break;
-      case 5: {
-        const elapsed = BogoNumbers.duration(ms);
-        this.log('TIME', elapsed.text + ' ' + elapsed.unit); break;
-      }
+      return;
     }
   }
   reset() {
-    this.nextAt = 0; this.lastWork = 0n; this.step = 0; this.worker = 0; this.announced = false;
+    this.nextAt = 0; this.seen.clear(); this.sampleRows = 0; this.pendingBatch = null;
+    this.worker = 0; this.announced = false; this.cancelScroll();
   }
 }

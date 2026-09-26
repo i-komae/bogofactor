@@ -37,7 +37,23 @@ const BogoWorker = (() => {
         factor = { d: String(d), q: String(q) };
       }
       postMessage({ type: 'snapshot', id: j.id, seq, status, trials: String(t), elapsedMs: ms,
-        rate: status === 'running' ? j.rates.value(t, ms) : null, factor, memoryBytes: engine.memory.buffer.byteLength });
+        rate: status === 'running' ? j.rates.value(t, ms) : null, factor,
+        sample: j.samplePending ? j.sample : null, memoryBytes: engine.memory.buffer.byteLength });
+      j.samplePending = false;
+    }
+    function captureSample(j) {
+      const trial = count();
+      const found = engine.get_found();
+      const d = BOGO.read(engine, engine.ptr_divisor(), found || j.divisorWords.length);
+      if (d < 2n || d > j.root) throw Error('Sampled divisor is outside the search range.');
+      // Only a sparse, already completed test is rechecked for the log. This
+      // never draws another candidate or increments the engine trial counter.
+      const remainder = j.n % d;
+      if ((remainder === 0n) !== !!found) throw Error('Sampled test verification failed.');
+      j.sample = { trial: String(trial), divisor: String(d), remainder: String(remainder),
+        fromTrial: String(j.lastSampleTrial + 1n), tested: String(trial - j.lastSampleTrial) };
+      j.lastSampleTrial = trial;
+      j.samplePending = true;
     }
     function finish(j, status) { freeze(j); j.paused = true; j.done = true; report(j, status); }
     function tick() {
@@ -47,7 +63,24 @@ const BogoWorker = (() => {
         const rem = j.cap - count();
         if (rem <= 0n) { finish(j, 'capped'); return; }
         const budget = Number(rem < BigInt(j.budget) ? rem : BigInt(j.budget));
-        const start = performance.now(); engine.run(budget); const dt = performance.now() - start;
+        const start = performance.now(), sampleDue = start >= j.nextSample;
+        if (sampleDue) {
+          // The export stores only the last candidate, not its length. Clear
+          // unused high words before ONE normal test so its value is unambiguous
+          // even when a small candidate follows a large one. Candidate order,
+          // distribution, first-hit stopping and the quota are unchanged.
+          if (budget > 1) engine.run(budget - 1);
+          if (!engine.get_found()) {
+            j.divisorWords.fill(0);
+            engine.run(1);
+          }
+          captureSample(j);
+          j.nextSample = performance.now() + j.sampleInterval;
+        } else {
+          engine.run(budget);
+          if (engine.get_found()) captureSample(j);
+        }
+        const dt = performance.now() - start;
         if (engine.get_found()) { finish(j, 'found'); return; }
         if (count() >= j.cap) { finish(j, 'capped'); return; }
         const rate = budget / Math.max(dt, .05);
@@ -75,7 +108,12 @@ const BogoWorker = (() => {
           if (cap < 1n || cap > (1n << 64n) - 1n) throw Error('Invalid per-worker trial quota.');
           const config = BOGO.config(n); BOGO.setup(engine, config);
           job = { id: m.id, n, cap, paused: true, done: false, started: null, elapsedMs: 0, budget: 256,
-            lastReport: 0, throughput: null, sequence: 0, outstanding: null, rates: new RateWindow(), rateAt: 0 };
+            lastReport: 0, throughput: null, sequence: 0, outstanding: null, rates: new RateWindow(), rateAt: 0,
+            root: config.root,
+            divisorWords: new Uint32Array(engine.memory.buffer, engine.ptr_divisor(), Math.ceil(config.root.toString(2).length / 32)),
+            sampleInterval: Math.max(60, Math.min(2000, Number(m.sampleInterval) || 60)),
+            nextSample: 0, sampleOffset: Math.max(0, Number(m.sampleOffset) || 0),
+            sample: null, samplePending: false, lastSampleTrial: 0n };
           job.rates.reset(0n, 0);
           postMessage({ type: 'prepared', id: m.id, candidateCount: String(config.count), engineKind });
           return;
@@ -85,6 +123,7 @@ const BogoWorker = (() => {
         else if (m.cmd === 'run' || m.cmd === 'resume') {
           if (j.done || !j.paused) return;
           j.paused = false; j.started = performance.now(); j.rates.reset(count(), elapsed(j)); j.rateAt = elapsed(j);
+          j.nextSample = performance.now() + j.sampleOffset;
           j.outstanding = null; j.lastReport = performance.now(); report(j, 'running'); schedule();
         } else if (m.cmd === 'pause') {
           if (!j.done) { freeze(j); j.paused = true; }
