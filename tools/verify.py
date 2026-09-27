@@ -6,7 +6,7 @@ Run from the repository root:
     python tools/verify.py            # all checks
     python tools/verify.py hit perf   # selected groups
 
-Groups: shots, hit, hidden, lanes, reels, input, layout, perf.
+Groups: shots, hit, hidden, stars, mobile, rims, bgm, share, lanes, reels, input, layout, perf.
 Screenshots go to verify-out/ (add it to .gitignore). Exit code is non-zero if any check fails.
 The checks rely on element ids and window.bogoDiagnostics; update the
 selectors here if the markup changes, never weaken a threshold to pass.
@@ -35,13 +35,16 @@ def serve():
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return f'http://127.0.0.1:{port}/'
 
-async def open_page(browser, url, size=(1440, 900), phone=False, scheme='dark', cores=8, reduce=False):
+async def open_page(browser, url, size=(1440, 900), phone=False, scheme='dark', cores=8, reduce=False, init=None):
     ctx = await browser.new_context(viewport={'width': size[0], 'height': size[1]}, color_scheme=scheme,
                                     is_mobile=phone, has_touch=phone, reduced_motion='reduce' if reduce else 'no-preference')
     await ctx.add_init_script(f"Object.defineProperty(navigator,'hardwareConcurrency',{{get:()=>{cores}}})")
+    if init: await ctx.add_init_script(init)
     page = await ctx.new_page()
     page.errors = []
     page.on('pageerror', lambda e: page.errors.append(str(e)))
+    page.audio_requests = []
+    page.on('request', lambda r: '/assets/audio/' in r.url and page.audio_requests.append(r.url))
     await page.goto(url)
     await page.wait_for_function("window.bogoDiagnostics && bogoDiagnostics.status==='idle'", timeout=20000)
     await page.wait_for_timeout(1700)          # opening sequence
@@ -106,6 +109,124 @@ async def group_hidden(browser, url):
     await page.wait_for_timeout(1500); c = await page.evaluate(get)
     gained = c - b
     check(abs(gained - rate * 11.5) <= rate * 11.5 * 0.15, f'visible rate {rate:.1f}/s; hidden 10 s + 1.5 s gained {gained} (expected ≈{rate*11.5:.0f})')
+    await page.context.close()
+
+# Background stars (5-2): brightness tiers follow q = min(N mod d, d - N mod d) / d, which is
+# uniform on [0, 0.5]; snapshots carry (v, u, q) numbers only, never divisor strings.
+FIELD = """(()=>{ const w=(bogoDiagnostics.lastSnapshot||{}).workers||[]; return w.map(x=>{ const f=x.fieldSamples;
+  const typed=Object.prototype.toString.call(f)==='[object Float64Array]', a=Array.from(f||[]);
+  return {typed, n:a.length, strings:a.filter(y=>typeof y!=='number').length, bad:a.filter((y,i)=>!Number.isFinite(y)||(i%3===2?Math.abs(y)>.5:(y<0||y>1))).length}; }); })()"""
+
+async def group_stars(browser, url):
+    print('\n[stars] brightness tiers from real residues; numeric samples only')
+    page = await open_page(browser, url)
+    await page.select_option('#preset', 'rsa2048'); await page.click('#start')
+    batches = []
+    for _ in range(40):
+        await page.wait_for_timeout(300); batches += await page.evaluate(FIELD)
+    d = await page.evaluate('bogoDiagnostics.visuals.sampleField')
+    n, t = sum(d['tiers']), d['tiers']
+    expect = [n * .015, n * .11, n * .875]
+    chi = sum((o - e) ** 2 / e for o, e in zip(t, expect))
+    check(n >= 1000 and chi < 13.82, f'tiers {t} of {n} (expected ≈ 1.5 %, 11 %, 87.5 %): chi2={chi:.2f} (< 13.82, df=2)')
+    below, above = d['brightSides']['below'], d['brightSides']['above']
+    check(abs(below - above) <= 3.3 * (below + above) ** .5, f'bright stars by side: below {below}, above {above} (balanced within 3.3 sigma)')
+    filled = [b for b in batches if b['n']]
+    check(bool(filled) and all(b['typed'] and b['n'] % 3 == 0 and not b['strings'] and not b['bad'] for b in batches),
+          f'fieldSamples are Float64Array (v, u, q) triples: {len(filled)} non-empty batches, {sum(b["n"] for b in filled) // 3} samples, no strings')
+    check(d['visiblePoints'] <= 20000, f'at most 20000 points shown: {d["visiblePoints"]} (layers {d["layers"]})')
+    await page.context.close()
+
+# Phones (5-3): coverage moves to the LIVE tab's fixed 116px slot while a search is active.
+SLOT = """(()=>{ const o=document.getElementById('output-panel'), c=document.querySelector('.coverage'), r=document.getElementById('result-coverage');
+  return {state:bogoDiagnostics.status, slot:Math.round(o.getBoundingClientRect().height), inTarget:document.getElementById('form').contains(c),
+    inSlot:o.contains(c), shown:c.getBoundingClientRect().height>0, body:document.querySelector('.output-body').getBoundingClientRect().height>0,
+    final:r.hidden?null:r.textContent}; })()"""
+
+async def group_mobile(browser, url):
+    print('\n[mobile] coverage in the LIVE slot during a search, never in TARGET; slot stays 116px')
+    page = await open_page(browser, url, PHONE, True)
+    r = await page.evaluate(SLOT)
+    check(not r['inTarget'] and r['inSlot'], f'idle: coverage not in TARGET {json.dumps(r)}')
+    await page.select_option('#preset', 'rsa2048'); await page.tap('#start'); await page.wait_for_timeout(2500)
+    for name in ['running', 'paused']:
+        if name == 'paused': await page.tap('#mobile-main'); await status(page, ['paused'])
+        r = await page.evaluate(SLOT)
+        check(r['slot'] == 116 and r['shown'] and not r['body'] and not r['inTarget'], f'{name}: coverage in the slot {json.dumps(r)}')
+    await page.tap('#mobile-stop'); await status(page, ['stopped'])
+    r = await page.evaluate(SLOT)
+    check(r['slot'] == 116 and not r['shown'] and r['body'] and (r['final'] or '').startswith('COVERAGE '), f'stopped: result with final coverage {json.dumps(r)}')
+    await page.tap('#mobile-new'); await page.wait_for_timeout(400)
+    await page.fill('#n-input', SEMI); await page.tap('#start'); await status(page, ['found']); await page.wait_for_timeout(500)
+    r = await page.evaluate(SLOT)
+    check(r['slot'] == 116 and r['body'] and (r['final'] or '').startswith('COVERAGE '), f'found: result with final coverage {json.dumps(r)}')
+    await page.context.close()
+
+# Border light (5-4): one lap on the core at a search start, one green lap on the result
+# when found, nothing on TELEMETRY, and no continuous orbit.
+RIMS = "bogoDiagnostics.visuals.rims"
+
+async def group_rims(browser, url):
+    print('\n[rims] one-shot traces only; nothing orbits')
+    page = await open_page(browser, url)
+    d0 = await page.evaluate(RIMS)
+    check(not any('throughput' in p for p in d0['panels']), f'traced panels exclude TELEMETRY: {d0["panels"]}')
+    await page.select_option('#preset', 'rsa2048'); await page.click('#start')
+    await page.wait_for_function(f'{RIMS}.active>0', timeout=3000)
+    await page.wait_for_timeout(1500); a = await page.evaluate(RIMS)
+    await page.wait_for_timeout(2000); b = await page.evaluate(RIMS)
+    check(a['active'] == 0 and a['visibleStrips'] == 0 and a['completed'] == 1 and b['stripPaints'] == a['stripPaints'],
+          f'core lap ends and nothing repaints while running: {a["stripPaints"]} -> {b["stripPaints"]} paints, completed {a["completed"]}')
+    await page.click('#stop'); await status(page, ['stopped'])
+    await page.fill('#n-input', SEMI); await page.click('#start'); await status(page, ['found'])
+    await page.wait_for_timeout(1800); c = await page.evaluate(RIMS)
+    laps = dict(zip(c['panels'], c['laps']))
+    check(laps.get('output-panel') == 1 and c['active'] == 0 and c['visibleStrips'] == 0,
+          f'one green lap on the result when found, then idle: laps {laps}, active {c["active"]}')
+    await page.context.close()
+    page = await open_page(browser, url)
+    await page.click('#fx-toggle'); await page.select_option('#preset', 'rsa2048'); await page.click('#start'); await page.wait_for_timeout(1000)
+    d = await page.evaluate(RIMS)
+    check(d['traces'] == 0 and d['visibleStrips'] == 0, f'FX OFF: no trace {json.dumps({k: d[k] for k in ("traces", "visibleStrips")})}')
+    await page.context.close()
+
+# Soundtrack (5-5): fetched during the opening, not when the connection asks to save data;
+# decoding waits for intent.
+async def group_bgm(browser, url):
+    print('\n[bgm] preload during the opening; none with saveData')
+    page = await open_page(browser, url)
+    m = await page.evaluate('bogoDiagnostics.visuals.music')
+    check(len(page.audio_requests) == 1 and m['preload'] in ('loading', 'loaded') and not m['decoded'],
+          f'preload started, not decoded before intent: requests {len(page.audio_requests)}, preload {m["preload"]}, decoded {m["decoded"]}')
+    await page.hover('#sound-toggle')
+    await page.wait_for_function('bogoDiagnostics.visuals.music.decoded', timeout=15000)
+    check(True, 'hover decodes the preloaded bytes')
+    await page.context.close()
+    page = await open_page(browser, url, init="Object.defineProperty(navigator,'connection',{get:()=>({saveData:true,effectiveType:'4g'})})")
+    await page.wait_for_timeout(1500)
+    m = await page.evaluate('bogoDiagnostics.visuals.music')
+    check(not page.audio_requests and m['preload'].startswith('skipped'), f'saveData: no preload (requests {len(page.audio_requests)}, preload {m["preload"]})')
+    await page.context.close()
+
+# Sharing: the text is a complete, post-sized summary (X counts a link as 23; limit 280).
+POST = """(()=>{ const q='1'+'0'.repeat(1998)+'7', long=BogoCard.post(BogoCard.model({status:'found', n:String(3n*BigInt(q)),
+  factor:{d:'3', q}, trials:'18446744073709551615', elapsedMs:123456789}));
+  const found=BogoCard.post(BogoCard.model(bogoDiagnostics.lastSnapshot));
+  return {found, foundWeight:BogoCard.weight(found), long, longWeight:BogoCard.weight(long)}; })()"""
+
+async def group_share(browser, url):
+    print('\n[share] shared text carries the result and fits a post')
+    page = await open_page(browser, url)
+    await page.context.grant_permissions(['clipboard-read', 'clipboard-write'], origin=url.rstrip('/'))
+    await page.fill('#n-input', SEMI); await page.click('#start'); await status(page, ['found'])
+    r = await page.evaluate(POST)
+    check(r['foundWeight'] <= 280 and '10000019 × 10000079' in r['found'] and 'trials' in r['found'] and r['found'].endswith('https://i-komae.github.io/bogofactor/'),
+          f'found: {r["foundWeight"]} / 280 {json.dumps(r["found"], ensure_ascii=False)}')
+    check(r['longWeight'] <= 280 and '(2,000 digits)' in r['long'], f'2000-digit result abridged: {r["longWeight"]} / 280 {json.dumps(r["long"], ensure_ascii=False)}')
+    await page.click('#copy'); await page.wait_for_function("!document.getElementById('share-copy-text').disabled")
+    await page.click('#share-copy-text'); await page.wait_for_timeout(300)
+    copied = await page.evaluate('navigator.clipboard.readText()')
+    check(copied == r['found'], f'COPY TEXT copies the post: {json.dumps(copied, ensure_ascii=False)}')
     await page.context.close()
 
 LANES = """(()=>{ const lanes=[...document.querySelectorAll('#worker-lanes .worker-lane')], box=document.getElementById('worker-lanes').getBoundingClientRect();
@@ -203,8 +324,9 @@ async def group_shots(browser, url):
             await page.context.close()
     print(f'  saved to {OUT}')
 
-GROUPS = {'shots': group_shots, 'hit': group_hit, 'hidden': group_hidden, 'lanes': group_lanes,
-          'reels': group_reels, 'input': group_input, 'layout': group_layout, 'perf': group_perf}
+GROUPS = {'shots': group_shots, 'hit': group_hit, 'hidden': group_hidden, 'stars': group_stars, 'mobile': group_mobile,
+          'rims': group_rims, 'bgm': group_bgm, 'share': group_share, 'lanes': group_lanes, 'reels': group_reels, 'input': group_input,
+          'layout': group_layout, 'perf': group_perf}
 
 async def main():
     wanted = sys.argv[1:] or list(GROUPS)

@@ -53,7 +53,7 @@
           <p class="eyebrow">RANDOM DIVISOR SEARCH</p>
           <p class="brand-motto">LEAVE IT TO LUCK.</p>
         </div>
-        <div class="intro-meta"><span class="local-light" aria-hidden="true"></span>BEST CASE: O(1)*</div>
+        <div class="intro-meta"><span class="local-light" aria-hidden="true"></span>FACTORING IN O(1)</div>
         <div class="toolbar" aria-label="Display controls">
           <button type="button" class="tool" id="fx-toggle" aria-pressed="true" title="Turn decorative motion off"><span class="tool-light" aria-hidden="true"></span><span id="fx-label">FX / FULL</span></button>
           <button type="button" class="tool" id="sound-toggle" aria-pressed="false" title="Play Cyber 08 — MaouDamashii">BGM / OFF</button>
@@ -74,14 +74,31 @@
           <div class="payload-body">
             <div class="field-heading">
               <label for="n-input">INTEGER N</label>
-              <span id="input-digits">19 DIGITS</span>
+              <span class="field-meta"><span id="input-digits">19 DIGITS</span><button type="button" id="view-all" class="view-all" aria-haspopup="dialog" hidden="">VIEW ALL</button></span>
             </div>
             <div class="input-frame">
-              <textarea id="n-input" rows="4" inputmode="numeric" spellcheck="false" autocomplete="off" autocapitalize="off" maxlength="10000" aria-describedby="error">1000000016000000063</textarea>
+              <textarea id="n-input" rows="3" inputmode="numeric" spellcheck="false" autocomplete="off" autocapitalize="off" maxlength="10000" aria-describedby="error">1000000016000000063</textarea>
+              <div id="n-preview" class="n-preview" aria-hidden="true"></div>
             </div>
             <div class="input-meta">
               <span>INTEGER / EXACT</span>
               <span id="input-bits">60 BITS</span>
+            </div>
+            <div class="target-data">
+              <div class="candidate-block">
+                <span class="eyebrow">ELIGIBLE CANDIDATES</span>
+                <output id="candidate-count" aria-live="polite">—</output>
+                <span class="candidate-note">UNIFORM DRAW · WITH REPLACEMENT</span>
+                <p id="error" class="error" role="alert" hidden=""></p>
+              </div>
+              <section class="coverage" aria-label="Expected candidate coverage">
+                <div class="coverage-heading">
+                  <span class="eyebrow">EXPECTED COVERAGE</span>
+                  <output id="coverage-value" aria-live="off">0 %</output>
+                </div>
+                <div class="coverage-plot"><canvas id="coverage-curve" role="img" aria-label="Expected fraction of candidates drawn at least once; trials range from zero to three times the candidate count"></canvas></div>
+                <p class="coverage-note" title="Expected share: 1 − (1 − 1/C)^t. The curve uses 1 − exp(−t/C); C is the number of eligible candidates, t is completed trials. This is an expectation, not a count of distinct draws.">SHARE OF CANDIDATES DRAWN AT LEAST ONCE</p>
+              </section>
             </div>
             <div class="search-controls">
               <div class="preset-setting">
@@ -93,46 +110,30 @@
                   <span aria-hidden="true">⌄</span>
                 </div>
               </div>
-            <div class="limit-row">
-              <label for="cap">TRIAL LIMIT</label>
-              <div class="select-wrap">
-                <select id="cap">
-                  <option value="100000">100,000</option>
-                  <option value="1000000">1,000,000</option>
-                  <option value="100000000">100,000,000</option>
-                  <option value="0" selected="">Unlimited</option>
-                </select>
-                <span aria-hidden="true">⌄</span>
-              </div>
-            </div>
-            <div class="worker-setting">
-              <label for="workers">WORKERS <span id="workers-hint"></span></label>
-              <div class="select-wrap">
-                <select id="workers" aria-label="Number of parallel workers"></select>
-                <span aria-hidden="true">⌄</span>
-              </div>
-            </div>
-            <div class="actions">
-              <button type="submit" id="start" class="primary" disabled=""><span id="start-label">INITIALIZING</span><svg class="action-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 4L15 10L7 16Z"></path></svg></button>
-              <button type="button" id="stop" class="abort" hidden="">ABORT</button>
-            </div>
-            <p class="key-hint"><span>⌘ / CTRL + ENTER</span><span>RUN / PAUSE</span></p>
-            <p id="error" class="error" role="alert" hidden=""></p>
-            </div>
-            <div class="target-data">
-            <div class="candidate-block">
-              <span class="eyebrow">ELIGIBLE CANDIDATES</span>
-              <output id="candidate-count" aria-live="polite">—</output>
-              <span class="candidate-note">UNIFORM DRAW · WITH REPLACEMENT</span>
-            </div>
-              <section class="coverage" aria-label="Expected candidate coverage">
-                <div class="coverage-heading">
-                  <span class="eyebrow">EXPECTED COVERAGE</span>
-                  <output id="coverage-value" aria-live="off">0 %</output>
+              <div class="limit-row">
+                <label for="cap">TRIAL LIMIT</label>
+                <div class="select-wrap">
+                  <select id="cap">
+                    <option value="100000">100,000</option>
+                    <option value="1000000">1,000,000</option>
+                    <option value="100000000">100,000,000</option>
+                    <option value="0" selected="">Unlimited</option>
+                  </select>
+                  <span aria-hidden="true">⌄</span>
                 </div>
-                <div class="coverage-plot"><canvas id="coverage-curve" role="img" aria-label="Expected fraction of candidates drawn at least once; trials range from zero to three times the candidate count"></canvas></div>
-                <p class="coverage-note" title="Expected share: 1 − (1 − 1/C)^t. The curve uses 1 − exp(−t/C); C is the number of eligible candidates, t is completed trials. This is an expectation, not a count of distinct draws.">SHARE OF CANDIDATES DRAWN AT LEAST ONCE</p>
-              </section>
+              </div>
+              <div class="worker-setting">
+                <label for="workers">WORKERS <span id="workers-hint"></span></label>
+                <div class="select-wrap">
+                  <select id="workers" aria-label="Number of parallel workers"></select>
+                  <span aria-hidden="true">⌄</span>
+                </div>
+              </div>
+              <div class="actions">
+                <button type="submit" id="start" class="primary" disabled=""><span id="start-label">INITIALIZING</span><svg class="action-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 4L15 10L7 16Z"></path></svg></button>
+                <button type="button" id="stop" class="abort" hidden="">ABORT</button>
+              </div>
+              <p class="key-hint"><span>⌘ / CTRL + ENTER</span><span>RUN / PAUSE</span></p>
             </div>
           </div>
         </form>
@@ -212,6 +213,7 @@
           <div class="output-label">
             <span class="eyebrow">RESULT</span>
             <h2 id="result-heading">AWAITING<br/>RESULT</h2>
+            <span id="result-coverage" class="result-coverage" hidden=""></span>
             <div class="verification" id="verification">N = d × q</div>
           </div>
           <div class="output-body" tabindex="0" aria-label="Complete divisor search result">
@@ -221,7 +223,7 @@
             </div>
             <div id="factor-values" class="factor-values" hidden="">
               <span id="factor-d"></span>
-              <span class="multiply" aria-label="times">×</span>
+              <span class="multiply"><span aria-hidden="true">×</span><span class="sr-only">times</span></span>
               <span id="factor-q"></span>
             </div>
             <p id="result-note" class="result-note" hidden=""></p>
@@ -246,9 +248,9 @@
         <button class="dialog-close" aria-label="Close">×</button>
       </form>
       <p class="eyebrow">BOGO / FACTOR</p>
-      <h2 id="about-title">O(1).<br/><span>IF LUCKY.</span></h2>
+      <h2 id="about-title">FACTORING<br/><span>IN O(1)<sup class="note-mark">*</sup></span></h2>
       <p class="about-hook">Find one non-trivial factor.<br/>Leave the rest to luck.</p>
-      <p class="fine-print">*Best-case trial count. Big-integer arithmetic is not constant-time.</p>
+      <p class="fine-print">*Best-case trial count. The worst case takes forever.</p>
       <div class="credits">
         <h3>SOUNDTRACK</h3>
         <p><a href="https://maou.audio/bgm_cyber08/" target="_blank" rel="noopener noreferrer">Cyber 08</a></p>
@@ -257,6 +259,25 @@
       Original loop recording. Playback volume adjusted.</p>
       </div>
       <p class="fine-print">BOGO / FACTOR · i-komae.github.io/bogofactor</p>
+    </dialog>
+    <dialog id="digits-dialog" class="sheet-dialog" aria-labelledby="digits-title">
+      <div class="share-heading">
+        <div>
+          <p class="eyebrow">BOGO / FACTOR</p>
+          <h2 id="digits-title">INTEGER N</h2>
+        </div>
+        <form method="dialog">
+          <button type="submit" class="dialog-close" aria-label="Close">×</button>
+        </form>
+      </div>
+      <p class="share-preview-meta"><span id="digits-meta"></span><span>5-DIGIT GROUPS · LINE START = DIGIT POSITION</span></p>
+      <div class="digits-window" tabindex="0" aria-label="All digits of N">
+        <pre id="digits-body"></pre>
+      </div>
+      <div class="share-actions digits-actions">
+        <button type="button" id="digits-copy"><span>COPY DIGITS</span><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="6" y="6" width="11" height="11"></rect><path d="M13 3H3v10"></path></svg></button>
+      </div>
+      <p id="digits-feedback" class="sheet-feedback" role="status" aria-live="polite"></p>
     </dialog>
     <dialog id="share-dialog" aria-labelledby="share-title">
       <div class="share-heading">
@@ -288,6 +309,7 @@
     <!-- All code, engines and music are served from this application directory. -->
     <script defer src="js/common.js"></script>
     <script defer src="js/rate.js"></script>
+    <script defer src="js/sample-ring.js"></script>
     <script defer src="js/presets.js"></script>
     <script defer src="js/numbers.js"></script>
     <script defer src="js/audio.js"></script>

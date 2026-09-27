@@ -36,7 +36,7 @@
   };
   let status = 'boot', worker = null, workerURL = null, initialized = false;
   let engineKind = null, runId = 0, last = null, fatal = false, unavailable = false;
-  let watchdog = null, copyTimer = null;
+  let watchdog = null, copyTimer = null, statusTimer = 0;
   const logical = Math.max(1, navigator.hardwareConcurrency || 2), maxWorkers = Math.min(32, logical);
   const defaultWorkers = Math.max(1, Math.min(4, Math.floor(logical / 2)));
   $('workers').add(new Option('AUTO / ' + defaultWorkers, String(defaultWorkers)));
@@ -107,9 +107,17 @@
   }
   $('view-input').onclick = () => switchView('input');
   $('view-live').onclick = () => { if (hasRun) switchView('live'); };
+  // Phones show expected coverage in the LIVE tab's result slot, not in TARGET.
+  const coverageSection = document.querySelector('.coverage');
+  function placeCoverage() {
+    const home = mobileQuery.matches ? $('output-panel') : document.querySelector('.target-data');
+    if (coverageSection.parentElement !== home) home.append(coverageSection);
+  }
+  placeCoverage();
   mobileQuery.addEventListener('change', () => {
     ++viewSequence; viewAnimation?.cancel(); viewAnimation = null;
     viewport.classList.remove('view-transitioning');
+    placeCoverage();
     commitView(view);
   });
   $('mobile-main').onclick = () => $('form').requestSubmit();
@@ -122,6 +130,9 @@
     pendingSnapshot = null;
   }
   function receiveSnapshot(m, source) {
+    // Background samples are recorded on receipt, so a superseded progress
+    // frame or a hidden tab never discards them.
+    fx('samples', m);
     // At most one pending progress frame. Terminal/pause messages supersede it.
     if (m.status !== 'running') { cancelPaint(); render(m); return; }
     pendingSnapshot = m;
@@ -168,8 +179,11 @@
     const previous = status;
     status = next;
     fx('state', next, previous, last);
-    $('status').textContent = labels[next] || next;
-    $('status').dataset.state = next;
+    const label = () => { $('status').textContent = labels[next] || next; $('status').dataset.state = next; };
+    // Like the core words: a screen that ends at once never flashes its label.
+    clearTimeout(statusTimer);
+    if (next === 'screening') statusTimer = setTimeout(() => { if (status === 'screening') label(); }, 300);
+    else label();
     controls();
   }
   function message(text) {
@@ -202,6 +216,7 @@
     $('factor-q').textContent = '';
     $('factor-empty').hidden = false;
     $('copy').hidden = true;
+    $('result-coverage').hidden = true;
     $('error').hidden = true;
     $('n-input').removeAttribute('aria-invalid');
     note();
@@ -233,11 +248,118 @@
     updateCandidateCount();
     const input = $('n-input');
     const digits = input.value.normalize('NFKC').replace(/[\s,_]/g, '').length;
-    input.classList.toggle('long', digits > 15);
     $('input-digits').textContent = /^\d+$/.test(input.value.normalize('NFKC').replace(/[\s,_]/g, '')) ? `${digits.toLocaleString('en-US')} DIGITS` : '';
-    // The input is a viewport-defined number of complete lines in every state; overflow scrolls inside.
-
+    fitInput();
   }
+  // INTEGER N shows every digit when it can. On the desktop layout it takes the
+  // largest size from 15px to 11px (line height 1.5x, whole lines) whose full
+  // text fits the height the coverage plot can lend; the plot keeps 64px and
+  // the controls below never move. A longer number gets an explicit head /
+  // count / tail preview at rest, and VIEW ALL. Phones and narrow windows let
+  // the field grow with its content instead of scrolling inside it.
+  const nInput = $('n-input'), inputFrame = nInput.parentElement, preview = $('n-preview');
+  const wideQuery = matchMedia('(min-width:1101px)');
+  const measure = document.createElement('canvas').getContext('2d');
+  const inputFit = { key: '', abridged: null };
+  const digitsOf = () => nInput.value.normalize('NFKC').replace(/[\s,_]/g, '');
+  function fitInput() {
+    const plot = document.querySelector('.payload .coverage-plot'), width = nInput.clientWidth;
+    if (!width) return;
+    const desktop = wideQuery.matches && !mobileQuery.matches && !!plot;
+    const key = [nInput.value, width, desktop, desktop ? $('form').clientHeight : 0].join('|');
+    if (key === inputFit.key) return;
+    inputFit.key = key;
+    const style = nInput.style;
+    let abridged = null;
+    style.height = '0px';
+    if (!desktop) {
+      style.removeProperty('font-size'); style.removeProperty('line-height');
+      style.height = Math.max(80, nInput.scrollHeight) + 'px';
+    } else {
+      // With the field empty, the plot holds all of the flexible height.
+      const room = plot.clientHeight - 64;
+      let height = null;
+      for (const font of [15, 14, 13, 12, 11]) {
+        const line = font * 1.5;
+        style.fontSize = font + 'px'; style.lineHeight = line + 'px';
+        const rows = Math.max(3, Math.round(nInput.scrollHeight / line));
+        if (rows * line <= room) { height = rows * line; break; }
+      }
+      if (height === null) {   // still 11px: as many whole lines as fit
+        abridged = { rows: Math.max(3, Math.floor(room / 16.5)) };
+        height = abridged.rows * 16.5;
+      }
+      style.height = height + 'px';
+    }
+    inputFit.abridged = abridged;
+    $('view-all').hidden = !abridged;
+    renderPreview();
+  }
+  function renderPreview() {
+    const fit = inputFit.abridged, resting = !!fit && document.activeElement !== nInput;
+    inputFrame.classList.toggle('abridged', resting);
+    if (!resting) return;
+    const digits = digitsOf();
+    // Characters per line as the field wraps them: monospace with 0.02em spacing.
+    measure.font = '11px ' + getComputedStyle(nInput).fontFamily;
+    const perLine = Math.max(8, Math.floor((nInput.clientWidth + .01) / (measure.measureText('0').width + .22)));
+    const total = Math.ceil(digits.length / perLine), line = i => digits.slice(i * perLine, (i + 1) * perLine);
+    if (total <= fit.rows) { preview.textContent = Array.from({ length: total }, (_, i) => line(i)).join('\n'); return; }
+    const head = fit.rows - 2, more = total - head - 1;
+    const note = [`··· ${more} MORE LINES · ${digits.length.toLocaleString('en-US')} DIGITS ···`, `··· ${more} MORE LINES ···`, `··· +${more} ···`]
+      .find(text => text.length <= perLine) || '···';
+    const gap = document.createElement('span'); gap.className = 'gap';
+    gap.textContent = ' '.repeat(Math.floor((perLine - note.length) / 2)) + note;
+    preview.replaceChildren(Array.from({ length: head }, (_, i) => line(i)).join('\n') + '\n', gap, '\n' + line(total - 1));
+  }
+  // Every digit, in five-digit groups; each line starts with its first digit's position.
+  function openDigits() {
+    const digits = digitsOf();
+    if (!/^\d+$/.test(digits)) return;
+    const preset = PRESETS.find(p => p.n === digits.replace(/^0+(?=\d)/, ''));
+    $('digits-meta').textContent = (preset?.id.startsWith('rsa') ? preset.label.split(' · ')[0] + ' · ' : '') +
+      nf.format(digits.length) + ' DIGITS · ' + $('input-bits').textContent;
+    $('digits-feedback').textContent = '';
+    $('digits-dialog').showModal();
+    const body = $('digits-body'), box = body.parentElement, css = getComputedStyle(box);
+    const width = box.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight);
+    measure.font = '12px ' + getComputedStyle(body).fontFamily;
+    const advance = measure.measureText('0').width, places = String(digits.length).length;
+    const groups = [20, 10, 5, 4, 2, 1].find(g => (places + 2 + 6 * g - 1) * advance <= width) || 1;
+    const perLine = groups * 5, rows = document.createDocumentFragment();
+    for (let i = 0; i < digits.length; i += perLine) {
+      const index = document.createElement('span'); index.className = 'digits-index';
+      index.textContent = String(i + 1).padStart(places, ' ');
+      rows.append(index, '  ' + digits.slice(i, i + perLine).replace(/(\d{5})(?=\d)/g, '$1 ') + '\n');
+    }
+    body.replaceChildren(rows);
+  }
+  async function copyDigits() {
+    const digits = digitsOf();
+    let copied = false;
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      try { await navigator.clipboard.writeText(digits); copied = true; } catch (_) { /* Manual fallback below. */ }
+    }
+    if (!copied) {
+      // Inside the modal: outside nodes are inert while it is open.
+      const field = document.createElement('textarea');
+      field.value = digits; field.readOnly = true; field.className = 'sr-only';
+      $('digits-dialog').append(field); field.select();
+      try { copied = document.execCommand('copy'); } catch (_) { /* Reported below. */ }
+      field.remove(); $('digits-copy').focus();
+    }
+    $('digits-feedback').textContent = copied ? nf.format(digits.length) + ' digits copied.' : 'Copy was blocked. Select the digits above instead.';
+  }
+  $('view-all').addEventListener('click', openDigits);
+  $('digits-copy').addEventListener('click', copyDigits);
+  $('digits-dialog').addEventListener('click', event => {
+    const dialog = $('digits-dialog');
+    if (event.target !== dialog) return;
+    const r = dialog.getBoundingClientRect();
+    if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) dialog.close();
+  });
+  nInput.addEventListener('focus', renderPreview);
+  nInput.addEventListener('blur', () => { nInput.scrollTop = 0; renderPreview(); });
   function editInput() {
     if (busy()) return;
     const failureText = fatal ? $('error').textContent : '';
@@ -279,6 +401,10 @@
     const trials = BigInt(m.trials), ms = Math.max(0, m.elapsedMs || 0);
     counter.set(trials, m.status !== 'running');
     coverage.update(trials, m.status);
+    // The final expected coverage stays beside the result (shown on phones).
+    const settled = trials > 0n && ['found', 'stopped', 'capped', 'counter-limit', 'interrupted'].includes(m.status);
+    $('result-coverage').hidden = !settled;
+    if (settled) $('result-coverage').textContent = 'COVERAGE ' + $('coverage-value').textContent;
     const duration = trials ? BogoNumbers.duration(ms) : { text: '—', unit: '' };
     $('elapsed').textContent = duration.text;
     $('elapsed-unit').textContent = duration.unit;
@@ -410,14 +536,12 @@
 
   $('copy').addEventListener('click', () => BogoShare.open(last));
 
-  let lastWidth = 0;
   const resize = () => {
     counterWidth = $('trial-count').parentElement.clientWidth;
     fitCounter();
     speedDisplay.resize();
     BogoNumbers.fit($('elapsed'), $('elapsed').textContent);
-    const width = $('n-input').clientWidth;
-    if (width !== lastWidth) { lastWidth = width; sizeInput(); }
+    fitInput();
   };
   if (globalThis.ResizeObserver) new ResizeObserver(resize).observe(document.querySelector('.workspace'));
   addEventListener('resize', resize);

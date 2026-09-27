@@ -41,6 +41,27 @@ const BogoCard = (() => {
     const parts = BogoNumbers.seconds(ms, 3).split('.');
     return BogoNumbers.group(parts[0]) + '.' + parts[1] + ' s';
   }
+  // Length as X counts it: a link is 23; Latin text 1 per character, most others 2.
+  function weight(value) {
+    let total = 0;
+    const rest = value.normalize('NFC').replace(/https?:\/\/\S+/g, () => { total += 23; return ''; });
+    for (const ch of rest) {
+      const c = ch.codePointAt(0);
+      total += c <= 4351 || (c >= 8192 && c <= 8205) || (c >= 8208 && c <= 8223) || (c >= 8242 && c <= 8247) ? 1 : 2;
+    }
+    return total;
+  }
+  // A post that fits X (280): one sentence, the verified expression and the link.
+  // Integers too long for that keep their first and last digits and their length.
+  function post(result) {
+    const [whole, fraction] = BogoNumbers.seconds(result.elapsedMs, 3).split('.');
+    const count = nf.format(BigInt(result.trials)), time = nf.format(BigInt(whole)) + '.' + fraction + ' s';
+    const write = (n, d, q) => `Found a non-trivial divisor with BOGO / FACTOR in ${count} trials (${time}).\n${n} = ${d} × ${q}\n${URL}`;
+    const full = write(result.name || result.n, result.d, result.q);
+    if (weight(full) <= 280) return full;
+    const brief = value => value.length > 20 ? `${value.slice(0, 8)}…${value.slice(-8)} (${nf.format(value.length)} digits)` : value;
+    return write(result.name || brief(result.n), brief(result.d), brief(result.q));
+  }
   function colors() {
     const s = getComputedStyle(document.body);
     const get = name => s.getPropertyValue('--' + name).trim();
@@ -163,5 +184,5 @@ const BogoCard = (() => {
     const blob = await new Promise((resolve, reject) => rendered.canvas.toBlob(b => b ? resolve(b) : reject(Error('Could not encode the image.')), 'image/png'));
     return { ...rendered, blob };
   }
-  return { URL, DISPLAY_URL, model, text, resolveName, paint, png, elapsed, colors };
+  return { URL, DISPLAY_URL, model, text, post, weight, resolveName, paint, png, elapsed, colors };
 })();

@@ -130,11 +130,13 @@ class RollingMetric {
     this.lastPaths = []; this.direction = 0;
     this.valueRoot = document.createElement('span');
     this.valueRoot.className = 'metric-value'; this.valueRoot.setAttribute('aria-hidden', 'true');
+    // Read aloud as plain text; a span may not carry aria-label. The unit keeps its own text.
+    this.spoken = document.createElement('span'); this.spoken.className = 'sr-only';
     this.unitRoot = externalUnit || document.createElement('span');
     this.unitRoot.classList.add('metric-unit');
     this.externalUnit = !!externalUnit;
     this.el.classList.add('metric-instrument');
-    this.el.replaceChildren(this.valueRoot);
+    this.el.replaceChildren(this.spoken, this.valueRoot);
     if (!externalUnit) this.el.append(this.unitRoot);
     this.reset();
   }
@@ -200,7 +202,7 @@ class RollingMetric {
     this.finish(); this.lastPaths = []; this.direction = 0;
     this.text = text; this.unit = unit; this.belowResolution = !!reading.belowResolution;
     this.el.dataset.value = text;
-    this.el.setAttribute('aria-label', (this.belowResolution ? 'Less than 0.01' : text) + (unit ? ' ' + unit : ''));
+    this.spoken.textContent = this.belowResolution ? 'Less than 0.01' : text;
     if (this.unitRoot.textContent !== unit) this.unitRoot.textContent = unit;
     this.unitRoot.style.setProperty('--unit-width', Math.max(3, unit.length) + 'ch');
     if (!numeric || this.belowResolution) {

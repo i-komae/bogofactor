@@ -1,5 +1,6 @@
-/* The export dialog is a result workspace, not a second dashboard. */
-#share-dialog {
+/* The export dialog is a result workspace, not a second dashboard.
+   The all-digits dialog (.sheet-dialog) shares its look. */
+#share-dialog, .sheet-dialog {
   width: min(920px, calc(100vw - 36px));
   max-width: 920px;
   max-height: calc(100dvh - 32px);
@@ -18,17 +19,17 @@
   margin-bottom: 18px;
 }
 
-#share-dialog h2 {
+#share-dialog h2, .sheet-dialog h2 {
   margin: 0;
   font: 500 21px/1.2 var(--sans);
   letter-spacing: .065em;
 }
 
-#share-dialog .eyebrow {
+#share-dialog .eyebrow, .sheet-dialog .eyebrow {
   margin-bottom: 7px;
 }
 
-#share-dialog .dialog-close {
+#share-dialog .dialog-close, .sheet-dialog .dialog-close {
   margin: 0 -8px 0 0;
   float: none;
 }
@@ -65,7 +66,7 @@
   cursor: zoom-out;
 }
 
-#share-dialog .share-preview-meta {
+#share-dialog .share-preview-meta, .sheet-dialog .share-preview-meta {
   font: 10px/1.6 var(--mono);
   color: var(--muted);
   margin: 9px 0 18px;
@@ -118,7 +119,7 @@
   opacity: .4;
 }
 
-#share-dialog #share-feedback {
+#share-dialog #share-feedback, .sheet-dialog .sheet-feedback {
   min-height: 22px;
   font: 12px/1.6 var(--sans);
   color: var(--accent);
@@ -159,13 +160,45 @@
   letter-spacing: 0;
 }
 
+/* Every digit, grouped by five; each line starts with its first digit's position. */
+#digits-dialog {
+  width: min(1000px, calc(100vw - 36px));
+  max-width: 1000px;
+}
+
+.digits-window {
+  border: 1px solid var(--line);
+  background: var(--page);
+  padding: 14px 16px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+#digits-body {
+  margin: 0;
+  font: 12px/18px var(--mono);
+  letter-spacing: 0;
+  color: var(--ink);
+  white-space: pre;
+}
+
+#digits-body .digits-index {
+  color: var(--muted);
+}
+
+.digits-actions {
+  grid-template-columns: minmax(0, 220px);
+  margin-top: 18px;
+}
+
 @media (max-width: 620px) {
-  #share-dialog {
+  #share-dialog, .sheet-dialog {
     width: calc(100vw - 20px);
     max-height: calc(100dvh - 20px);
     padding: 16px;
   }
-  #share-dialog h2 {
+  #share-dialog h2, .sheet-dialog h2 {
     font-size: 18px;
   }
   .share-heading {
@@ -182,7 +215,7 @@
     max-height: 40dvh;
     min-height: 80px;
   }
-  #share-dialog .share-preview-meta {
+  #share-dialog .share-preview-meta, .sheet-dialog .share-preview-meta {
     font-size: 8px;
     margin-bottom: 13px;
   }

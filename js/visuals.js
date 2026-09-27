@@ -234,8 +234,8 @@ const BogoVisual = (() => {
   let state = 'boot', wanted = true, runningFrame = 0, lastFrame = 0, phase = 0;
   let width = 480, height = 300, dpr = 1, visible = !document.hidden, inView = true;
   let palette = {}, frames = 0, drawMs = 0;
-  let toastTimer = 0, hitTimer = 0, startTimer = 0;
-  let target = '1000000016000000063', lastInput = null, lastSnapshot = null;
+  let toastTimer = 0, hitTimer = 0, startTimer = 0, wordTimer = 0;
+  let lastInput = null, lastSnapshot = null;
   const samples = new Float64Array(48); let sampleHead = 0, sampleCount = 0;
   const points = new Float64Array(9 * 20 * 3);
   const projected = new Float64Array(9 * 20 * 3);
@@ -249,7 +249,8 @@ const BogoVisual = (() => {
   canvas.before(scale);
   const scaleContext = scale.getContext('2d');
   let scaleKey = '';
-  const rims = new PanelRims(Array.from(document.querySelectorAll('.panel.core, .throughput-panel, .panel.payload, .panel.output')));
+  const corePanel = document.querySelector('.panel.core');
+  const rims = new PanelRims(document.querySelector('.workspace'), [corePanel, $('output-panel')]);
   // Equal angular rings give a stable wireframe, not fabricated factor candidates.
   for (let lat = 0; lat < 9; lat++) for (let lon = 0; lon < 20; lon++) {
     const a = (lat + 1) * Math.PI / 10, b = lon * Math.PI / 10, i = (lat * 20 + lon) * 3;
@@ -263,7 +264,7 @@ const BogoVisual = (() => {
   function log(tag, text, level = '') { activity.log(tag, text, level); }
   function colors() {
     const style = getComputedStyle(body), get = k => style.getPropertyValue(k).trim();
-    palette = { accent: get('--accent'), bright: get('--bright'), muted: get('--muted'), line: get('--line'), fine: get('--fine'), second: get('--secondary'), ink: get('--ink'), success: get('--success'), amber: get('--amber') };
+    palette = { accent: get('--accent'), bright: get('--bright'), muted: get('--muted'), line: get('--line'), fine: get('--fine'), second: get('--secondary'), ink: get('--ink'), success: get('--success'), amber: get('--amber'), star: get('--star'), starCool: get('--star-cool'), starWarm: get('--star-warm') };
     draw();
   }
   function size() {
@@ -278,11 +279,15 @@ const BogoVisual = (() => {
     ctx.beginPath(); ctx.arc(0, 0, radius, start, end); ctx.stroke();
   }
   function prepareScale(cx, cy, R, main) {
-    const key = [width, height, dpr, main, palette.fine, palette.line].join('|');
+    const key = [width, height, dpr, main, palette.fine, palette.line, palette.accent].join('|');
     if (key === scaleKey || !scaleContext) return;
     scaleKey = key; scale.width = Math.ceil(width * dpr); scale.height = Math.ceil(height * dpr);
     const g = scaleContext, tau = Math.PI * 2;
-    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.translate(cx, cy);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Faint scanlines, with the same edge fade as the samples. Static, so they live here.
+    g.fillStyle = palette.accent;
+    for (let y = 2; y < height; y += 4) { g.globalAlpha = .025 * SampleField.edge(y, height); g.fillRect(0, y, width, .5); }
+    g.translate(cx, cy);
     g.strokeStyle = palette.fine; g.lineWidth = .8; g.globalAlpha = .9;
     g.beginPath(); g.moveTo(-cx + 17, 0); g.lineTo(cx - 17, 0); g.stroke();
     const fade = g.createLinearGradient(0, -cy, 0, height - cy);
@@ -318,7 +323,7 @@ const BogoVisual = (() => {
   function draw() {
     if (!ctx || !palette.accent || width < 70 || height < 80) return;
     const t0 = performance.now(), tau = Math.PI * 2;
-    rims.draw(t0, state, wanted && !reduce.matches && visible && inView && state !== 'paused', palette);
+    rims.draw(t0, motion());
     ctx.clearRect(0, 0, width, height); ctx.save();
     // One shared geometric centre for the full dot rectangle, globe and banner.
     // Keep the scene centred; compact phones use the approved 18px reserve.
@@ -326,10 +331,10 @@ const BogoVisual = (() => {
     const reserve = width <= 400 ? 18 : 44;
     const R = Math.max(22, Math.min(width * .34, width / 2 - reserve, height / 2 - reserve));
     const active = state === 'running' || state === 'screening';
-    const main = state === 'found' ? palette.success : state === 'paused' || state === 'screening' ? palette.amber : palette.accent;
+    const main = state === 'found' ? palette.success : state === 'paused' ? palette.amber : palette.accent;
     sampleField.prepare(width, height, cx, cy, R, palette, dpr);
     prepareScale(cx, cy, R, main);
-    sampleField.drawHighlights(ctx, phase, state, palette, wanted && !reduce.matches);
+    sampleField.drawHit(ctx, state, palette);
     ctx.translate(cx, cy);
     for (let i = 0; i < 4; i++) {
       const a = i * Math.PI / 2 + phase * .2;
@@ -421,7 +426,6 @@ const BogoVisual = (() => {
     runningFrame = requestAnimationFrame(frame);
   }
   function syncMotion() {
-    rims.stop();
     if (!wanted || reduce.matches || !visible || state === 'paused') {
       RollingMetric.settleAll();
     }
@@ -446,7 +450,7 @@ const BogoVisual = (() => {
     interrupted: ['INTERRUPTED', 'SESSION CLOSED'], 'counter-limit': ['LIMIT', 'COUNTER CAPACITY']
   };
   function change(next, previous, snapshot) {
-    if (next === 'screening') sampleField.begin(lastInput || target);
+    if (next === 'screening') { sampleField.begin(); rims.cancel(); }
     if (next === 'found') {
       const divisor = snapshot?.factor?.d || '';
       const output = $('locked-divisor');
@@ -455,7 +459,12 @@ const BogoVisual = (() => {
       output.classList.toggle('long', divisor.length > 24);
     }
     state = next; body.dataset.state = next;
-    const w = words[next] || [next.toUpperCase(), '']; $('core-word').textContent = w[0]; $('core-sub').textContent = w[1];
+    const show = () => { const w = words[next] || [next.toUpperCase(), '']; $('core-word').textContent = w[0]; $('core-sub').textContent = w[1]; };
+    // A primality screen usually ends within a frame or two: keep the previous
+    // words rather than flash ANALYZING, and show it only if the screen lasts.
+    clearTimeout(wordTimer);
+    if (next === 'screening') wordTimer = setTimeout(() => { if (state === 'screening') show(); }, 300);
+    else show();
     $('counter-tag').textContent = next === 'running' ? 'LIVE / EXACT' : 'EXACT COUNT';
     const resultLabels = { found: 'FACTOR\nLOCKED', prime: 'PRIME\nINPUT', probable: 'PROBABLE\nPRIME', capped: 'LIMIT\nREACHED', stopped: 'SESSION\nSTOPPED', error: 'SYSTEM\nFAULT', interrupted: 'SESSION\nCLOSED', 'counter-limit': 'COUNTER\nLIMIT' };
     $('result-heading').textContent = resultLabels[next] || 'AWAITING\nRESULT';
@@ -480,6 +489,11 @@ const BogoVisual = (() => {
       log('INPUT', lastInput.length + ' digits · ' + BigInt(lastInput).toString(2).length + ' bits');
     }
     if (messages[next]) log(...messages[next], next === 'found' ? 'hit' : ['capped', 'probable', 'paused'].includes(next) ? 'warn' : '');
+    // One lap of light marks a new search and a verified divisor; nothing orbits.
+    const lap = wanted && !reduce.matches;
+    if (next === 'running' && previous === 'screening' && lap) rims.trace(corePanel, palette.accent, palette.star, .9);
+    else if (next !== 'running') rims.cancel();
+    if (next === 'found' && lap) rims.trace($('output-panel'), palette.success, palette.star, 1.2);
     clearTimeout(startTimer); body.classList.remove('start-effect');
     if (next === 'running' && previous !== 'running') {
       body.classList.add('start-effect'); startTimer = setTimeout(() => body.classList.remove('start-effect'), 1000);
@@ -509,7 +523,7 @@ const BogoVisual = (() => {
   }
   function update(snapshot) {
     lastSnapshot = snapshot;
-    sampleField.observe(snapshot, phase);
+    sampleField.observe(snapshot);
     workerMeters.update(snapshot);
     if (snapshot.elapsedMs - lastTelemetry >= 500 || snapshot.status !== 'running') {
       if (snapshot.status === 'running' && state !== 'pausing' && state !== 'stopping') chart(snapshot.rate);
@@ -519,7 +533,7 @@ const BogoVisual = (() => {
   }
   function input(n) {
     if (n === lastInput) return;
-    lastInput = n; target = n;
+    lastInput = n;
   }
   function reset() {
     // Retain the previous search raster while editing; begin() clears it.
@@ -543,7 +557,7 @@ const BogoVisual = (() => {
   $('fullscreen').addEventListener('click', fullscreen);
   document.addEventListener('fullscreenchange', () => { $('fullscreen').title = document.fullscreenElement ? 'Exit fullscreen (F or Esc)' : 'Enter fullscreen (F)'; });
   document.addEventListener('keydown', e => {
-    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName) || e.target.isContentEditable || $('about-dialog').open || $('share-dialog').open) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName) || e.target.isContentEditable || $('about-dialog').open || $('share-dialog').open || $('digits-dialog').open) return;
     if (e.key.toLowerCase() === 'f') { e.preventDefault(); fullscreen(); }
   });
   $('about').addEventListener('click', () => $('about-dialog').showModal());
@@ -561,7 +575,8 @@ const BogoVisual = (() => {
   colors(); size(); syncMotion(); log('BOOT', 'local engine initializing');
   return {
     state: change, snapshot: update, input, reset, toast, workers(count) { workerMeters.select(count); },
-    ready(kind) { $('core-engine').textContent = 'WASM / ' + kind.toUpperCase(); log('CORE', 'WASM/' + kind.toUpperCase() + ' ready'); log('RNG', 'ChaCha20 · local seed'); log('SAMPLER', 'wheel/17'); log('DRAW', 'uniform · with replacement'); },
+    samples(snapshot) { sampleField.ingest(snapshot.workers || []); },
+    ready(kind) { $('core-engine').textContent = 'WASM / ' + kind.toUpperCase(); log('CORE', 'WASM/' + kind.toUpperCase() + ' ready'); log('RNG', 'ChaCha20 · local seed'); log('SAMPLER', 'wheel/17'); log('DRAW', 'uniform · with replacement'); log('FIELD', 'brightness = |N mod d| / d near 0'); },
     error(text) { log('FAULT', text, 'warn'); },
     get diagnostics() { return { state, frames, meanDrawMs: drawMs, active: !!runningFrame, fullMotion: wanted && !reduce.matches, visible, inView, sound: BogoAudio.diagnostics.wanted, sampleCount, logRows: $('event-log').children.length, canvasPixels: canvas.width * canvas.height, music: BogoAudio.diagnostics, scanGeometry: 'projected-spherical-latitude', sampleField: sampleField.diagnostics, rims: rims.diagnostics, workerMeters: workerMeters.diagnostics }; }
   };

@@ -9,7 +9,7 @@ class SearchPool {
   }
   _emit(data) { if (!this.dead && this.onmessage) this.onmessage({ data }); }
   _spawn() {
-    const node = { worker: new Worker(this.url), kind: null, latest: null, sample: null, fieldSamples: [], prepared: false, stopped: false };
+    const node = { worker: new Worker(this.url), kind: null, latest: null, sample: null, samples: null, prepared: false, stopped: false };
     node.ready = new Promise((resolve, reject) => { node.resolve = resolve; node.reject = reject; });
     node.ready.catch(() => {}); // The pool reports startup failures through its own error channel.
     node.timer = setTimeout(() => {
@@ -39,10 +39,9 @@ class SearchPool {
       if (m.type === 'snapshot') {
         node.latest = m;
         if (m.sample) node.sample = m.sample;
-        if (m.fieldSamples?.length) {
-          node.fieldSamples.push(...m.fieldSamples);
-          if (node.fieldSamples.length > 64) node.fieldSamples.splice(0, node.fieldSamples.length - 64);
-        }
+        // Kept until the display takes them, even while frames are not delivered
+        // (a hidden tab); beyond capacity only the oldest samples are replaced.
+        if (m.fieldSamples?.length && node.samples) node.samples.append(m.fieldSamples);
         // Ack immediately: only one report can be in transit, one stored per node.
         if (m.status === 'running') node.worker.postMessage({ cmd: 'ack', id: j.id, seq: m.seq });
         node.stopped = ['found', 'stopped', 'capped'].includes(m.status);
@@ -77,13 +76,15 @@ class SearchPool {
     await Promise.all(this.nodes.map(n => n.ready));
     if (this.job !== j || j.phase !== 'setup') return;
     const total = j.cap || ((1n << 64n) - 1n), k = BigInt(this.nodes.length);
+    // Together the workers buffer at most what the display retains.
+    const fieldCapacity = Math.ceil(SampleRing.RETAINED / this.nodes.length);
     this.nodes.forEach((n, i) => {
-      n.latest = null; n.sample = null; n.fieldSamples = []; n.prepared = false; n.stopped = false;
+      n.latest = null; n.sample = null; n.samples = new SampleRing(fieldCapacity); n.prepared = false; n.stopped = false;
       const quota = total / k + (BigInt(i) < total % k ? 1n : 0n);
       n.worker.postMessage({ cmd: 'setup', id: j.id, n: String(j.n), cap: String(quota),
         sampleInterval: 60 * this.nodes.length, sampleOffset: 60 * i,
         // Five background observations per 50 ms across the WHOLE pool.
-        fieldInterval: 50 * this.nodes.length, fieldOffset: 50 * i });
+        fieldInterval: 50 * this.nodes.length, fieldOffset: 50 * i, fieldCapacity });
     });
   }
   _elapsed() { const j = this.job; return j ? j.elapsed + (j.started === null ? 0 : performance.now() - j.started) : 0; }
@@ -104,8 +105,8 @@ class SearchPool {
       prepMs: j.prepMs, rate, rateKind: status === 'running' || status === 'paused' ? 'recent' : 'average',
       cap: String(j.cap), candidateCount: j.candidateCount || '', factor: j.factor,
       workers: this.nodes.map((n, i) => {
-        // Transfer each bounded batch once; the log still sees only n.sample.
-        const fieldSamples = n.fieldSamples; n.fieldSamples = [];
+        // Hand over every buffered sample exactly once; the log still sees only n.sample.
+        const fieldSamples = n.samples ? n.samples.take() : new Float64Array(0);
         return { index: i, state: n.latest?.status || (j.phase === 'setup' ? 'ready' : j.phase),
           rate: n.latest?.rate || 0, trials: n.latest?.trials || '0', sample: n.sample,
           fieldSamples, memoryBytes: n.latest?.memoryBytes || 1048576 };
@@ -145,7 +146,7 @@ class SearchPool {
       const maximum = Math.min(32, Math.max(1, navigator.hardwareConcurrency || 2));
       const requested = Math.max(1, Math.min(maximum, Math.floor(Number(m.workers) || 1)));
       const workers = cap && cap < BigInt(requested) ? Number(cap) : requested;
-      this.nodes.forEach(node => { node.latest = null; node.sample = null; node.fieldSamples = []; node.stopped = false; node.prepared = false; });
+      this.nodes.forEach(node => { node.latest = null; node.sample = null; node.samples = null; node.stopped = false; node.prepared = false; });
       this.outstanding = null;
       this.job = { id: m.id, n, cap, workers, phase: 'screening', elapsed: 0, started: null, prepMs: 0, factor: null,
         rates: new RateWindow(), rateAt: 0 };

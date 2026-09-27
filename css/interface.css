@@ -6,6 +6,8 @@
 .field-heading, .limit-row label, .worker-setting label { font-size: 11px; letter-spacing: .045em; }
 .eyebrow { font-size: 9px; letter-spacing: .12em; }
 .tool { font-size: 11px; }
+/* Wide enough for "BGM / LOAD 99%": the toolbar never shifts while the soundtrack loads. */
+#sound-toggle { min-width: calc(14ch + .49em + 24px); }
 .select-wrap select, .payload-body > .select-wrap select { font-size: 12px; }
 .limit-row select { font-size: 12px; }
 .counter-heading h3, .stats dt, .worker-heading { font-size: 10px; letter-spacing: .095em; }
@@ -18,7 +20,6 @@
 .output-label .eyebrow { display: block; color: var(--accent); }
 .verification, .key-hint { font-size: 10px; }
 .factor-empty { font-size: 12px; }
-textarea.long { font-size: 13px; }
 #core-sub { font-size: 9px; letter-spacing: .13em; }
 .core-state { gap: 6px; }
 /* The cursor disappears in place: it never changes the title's measured width. */
@@ -123,10 +124,23 @@ h1 { font-size: clamp(30px,3vw,44px); }
 .payload-foot, .key-hint { display: none; }
 .payload-body { display: flex; flex-direction: column; min-height: 0; padding: 14px 16px; overflow: hidden; gap: 0; }
 .payload-body > .field-heading { flex: 0 0 auto; margin: 0 0 6px; }
-.payload .input-frame { flex: 0 0 auto; min-height: 0; max-height: none; margin: 0; padding: 10px 12px; border: 1px solid var(--line); background: var(--field); }
-.payload .input-frame textarea { display: block; width: 100%; height: 80px; min-height: 80px; max-height: 80px; padding: 0; border: 0; font: 13px/20px var(--mono); letter-spacing: .02em; resize: none; overflow: auto; scrollbar-width: thin; }
+/* INTEGER N: ui.js sets the height (and, on desktop, the size: 15px to 11px, line 1.5x).
+   The preview stands in, at rest, for a number too long to show at 11px. */
+.payload .input-frame { --frame-pad: 10px 12px; position: relative; flex: 0 0 auto; min-height: 0; max-height: none; margin: 0; padding: var(--frame-pad); border: 1px solid var(--line); background: var(--field); }
+.payload .input-frame textarea { display: block; width: 100%; height: 80px; min-height: 0; max-height: none; padding: 0; border: 0; font: 13px/20px var(--mono); letter-spacing: .02em; resize: none; overflow: hidden; scrollbar-width: thin; }
+.payload .input-frame textarea:focus { overflow-y: auto; }
+.n-preview { position: absolute; inset: var(--frame-pad); display: none; margin: 0; overflow: hidden; white-space: pre; font: 11px/16.5px var(--mono); letter-spacing: .02em; color: var(--bright); pointer-events: none; }
+.n-preview .gap { color: var(--muted); }
+.input-frame:has(textarea:read-only) .n-preview { color: var(--muted); }
+.input-frame.abridged .n-preview { display: block; }
+.input-frame.abridged textarea { opacity: 0; }
+.field-meta { display: inline-flex; align-items: center; gap: 10px; min-width: 0; white-space: nowrap; }
+.view-all { padding: 0; border: 0; background: none; font: 10px/1 var(--mono); letter-spacing: .08em; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.view-all:hover { color: var(--bright); }
+/* Operating the inputs only brightens the frame; nothing moves. */
+.payload:has(textarea:focus, select:focus) { border-color: var(--line-focus); }
 .payload .input-meta { flex: 0 0 auto; margin: 6px 0 0; font-size: 9px; }
-.search-controls { flex: 0 0 auto; margin-top: 12px; }
+.search-controls { flex: 0 0 auto; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--fine); }
 .search-controls .preset-setting, .search-controls .limit-row, .search-controls .worker-setting { display: grid; grid-template-columns: 78px minmax(0,1fr); align-items: center; gap: 8px; margin: 0 0 8px; padding: 0; border: 0; }
 .search-controls label { font: 10px/1.5 var(--mono); color: var(--muted); letter-spacing: .02em; }
 .search-controls .select-wrap { width: 100%; max-width: none; min-width: 0; }
@@ -135,8 +149,10 @@ h1 { font-size: clamp(30px,3vw,44px); }
 .search-controls .actions { display: grid; grid-template-columns: minmax(0,1fr) 64px; gap: 8px; margin: 10px 0 0; }
 .search-controls .primary, .search-controls .abort { min-width: 0; min-height: 42px; padding: 9px 10px; font-size: 11px; white-space: nowrap; }
 .primary .action-icon { width: 18px; height: 18px; flex: 0 0 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.target-data { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; margin-top: 14px; }
-.target-data .candidate-block { flex: 0 0 auto; margin: 0; padding: 10px 0; border-top: 1px solid var(--fine); }
+.target-data { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; margin-top: 12px; }
+.target-data .candidate-block { position: relative; flex: 0 0 auto; margin: 0; padding: 10px 0; border-top: 1px solid var(--fine); }
+/* An input error covers the candidate count (then shown as —); no control moves. */
+.candidate-block > .error { position: absolute; top: 0; left: 0; right: 0; min-height: 100%; margin: 0; z-index: 2; background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--panel); }
 .target-data .candidate-block output { font-size: 24px; line-height: 1.4; }
 .candidate-note { display: none; }
 .coverage { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; gap: 6px; padding-top: 10px; border-top: 1px solid var(--fine); }
@@ -199,12 +215,11 @@ body[data-fx=full][data-state=found].hit-effect .lock-banner { animation: lock-a
 @keyframes lock-acquire { from { box-shadow: 0 0 0 2px var(--success); } to { box-shadow: 0 0 0 0 transparent; } }
 .start-effect .core-view { animation: none; }
 .start-effect #reactor { animation: energize .9s ease-out; }
-/* Only the four narrow strips repaint. No masked square or full-panel layer. */
-.rim-strip { position: absolute; width: 100%; height: 2px; transform-origin: 0 0; pointer-events: none; z-index: 4; }
-.rim-top { top: 0; left: 0; }
-.rim-right { top: 0; left: 100%; transform: rotate(90deg); }
-.rim-bottom { top: 100%; left: 100%; transform: rotate(180deg); }
-.rim-left { top: 100%; left: 0; transform: rotate(270deg); }
+/* One-shot border traces: four 1px strips on a panel's border line, hidden while idle. */
+.workspace { position: relative; }
+.rim-strip { position: absolute; left: 0; top: 0; height: 1px; transform-origin: 0 0; pointer-events: none; z-index: 4; }
+/* The previous border stays until the trace has laid the new one. */
+body[data-state] .panel.is-tracing { border-color: var(--line); }
 /* Mobile log gets a separate row, not pixels from the globe/background. */
 .core-activity, .mobile-tabs, .mobile-dock { display: none; }
 .view-transitioning { pointer-events: none; }
@@ -214,8 +229,7 @@ body[data-fx=full][data-state=found].hit-effect .lock-banner { animation: lock-a
   h1 { font-size: 30px; }
   .workspace { gap: 9px; }
   .payload-body { padding: 10px 14px; }
-  .payload .input-frame { padding: 8px 10px; }
-  .payload .input-frame textarea { height: 60px; min-height: 60px; max-height: 60px; padding: 0; font-size: 13px; line-height: 20px; }
+  .payload .input-frame { --frame-pad: 8px 10px; }
   .payload .input-meta { display: none; }
   .search-controls { margin-top: 10px; }
   .search-controls .preset-setting, .search-controls .limit-row, .search-controls .worker-setting { grid-template-columns: 74px minmax(0,1fr); margin-bottom: 6px; }
@@ -268,6 +282,7 @@ body[data-fx=full][data-state=found].hit-effect .lock-banner { animation: lock-a
   .site-header .intro-meta, .heading-meta { display: none; }
   .toolbar { margin-left: auto; gap: 6px; }
   .tool { min-height: 34px; padding: 7px 9px; font-size: 10px; }
+  #sound-toggle { min-width: calc(14ch + .49em + 20px); }
   .fullscreen-tool span { display: none; }
   .system-mark { width: 20px; flex-shrink: 0; }
 
@@ -328,16 +343,22 @@ body[data-fx=full][data-state=found].hit-effect .lock-banner { animation: lock-a
   .app { min-height: 650px; height: 650px; }
 }
 @media (max-height:790px) {
-  .payload .input-frame textarea { height: 60px; min-height: 60px; max-height: 60px; line-height: 20px; }
   .target-data .candidate-block { padding: 6px 0; }
   .target-data .candidate-block output { font-size: 20px; }
 }
 @media (min-height:1001px) {
-  .payload .input-frame textarea { height: 120px; min-height: 120px; max-height: 120px; }
   .search-controls select { min-height: 38px; }
 }
+/* Phones: expected coverage lives in the LIVE tab's fixed 116px result slot while
+   a search is active; afterwards the slot shows the result and the final value. */
+.result-coverage { display: none; }
 @media (max-width:760px), (pointer:coarse) and (max-height:590px) {
-  .coverage-plot { flex: 0 0 120px; height: 120px; min-height: 120px; }
+  #output-panel > .coverage { display: none; grid-column: 1 / -1; grid-row: 1 / -1; min-height: 0; padding: 10px 13px 8px; border: 0; gap: 4px; }
+  #output-panel .coverage-plot { flex: 1 1 auto; height: auto; min-height: 0; }
+  #output-panel .coverage-note { display: none; }
+  body:is([data-state=screening],[data-state=running],[data-state=pausing],[data-state=paused],[data-state=resuming],[data-state=stopping]) #output-panel > .coverage { display: flex; }
+  body:is([data-state=screening],[data-state=running],[data-state=pausing],[data-state=paused],[data-state=resuming],[data-state=stopping]) #output-panel > :not(.coverage, .result-flare) { display: none; }
+  .result-coverage { display: block; margin-top: 2px; font: 9px/1.2 var(--mono); letter-spacing: .06em; color: var(--muted); white-space: nowrap; }
 }
 @media (min-width:761px) and (max-width:1100px) {
   .app { grid-template-rows: 100px minmax(0,1fr); }

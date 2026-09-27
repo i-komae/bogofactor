@@ -8,6 +8,7 @@
   --ink: #122e42;
   --muted: #496779;
   --line: #afc6d0;
+  --line-focus: #72a5b5;
   --fine: #cbdbe2;
   --accent: #006883;
   --bright: #00738d;
@@ -20,6 +21,10 @@
   --field: #eef5f8;
   --button: #006883;
   --scan: #0ba6bd08;
+  /* Brighter background stars: closest to an integer (base), and the two sides it leans toward. */
+  --star: #122e42;
+  --star-cool: #2f52b8;
+  --star-warm: #a8520f;
   --mono: "SFMono-Regular",Consolas,"Liberation Mono",monospace;
   --sans: "Helvetica Neue",Arial,sans-serif;
   --display: "Helvetica Neue", Arial, sans-serif;
@@ -402,12 +407,6 @@ select optgroup {
 .input-frame {
   position: relative;
   margin-top: 12px;
-}
-
-textarea.long {
-  font-size: 12px;
-  line-height: 1.65;
-  letter-spacing: .02em;
 }
 
 textarea:read-only {
@@ -1031,10 +1030,6 @@ body[data-state=running] .core {
 }
 
 
-body[data-state=screening] .state-indicator {
-  color: var(--amber);
-}
-
 body[data-state=paused] .state-indicator {
   color: var(--amber);
 }
@@ -1321,6 +1316,21 @@ dialog h2>span {
   color: var(--accent);
 }
 
+/* FACTORING must fit a phone-width dialog. */
+#about-title {
+  font-size: min(62px, 12.5vw);
+}
+
+/* Points to the fine print below, like the header's "O(1)*". */
+dialog h2 .note-mark {
+  font-size: .4em;
+  vertical-align: .95em;
+  line-height: 0;
+  letter-spacing: 0;
+  margin-left: .06em;
+  color: var(--muted);
+}
+
 dialog a {
   color: var(--accent);
   text-underline-offset: 3px;
@@ -1599,6 +1609,7 @@ dialog summary {
     --ink: #e3f5ff;
     --muted: #87a4b8;
     --line: #254254;
+    --line-focus: #3b7b8d;
     --fine: #162c3d;
     --accent: #65e4f7;
     --bright: #a8f5ff;
@@ -1610,7 +1621,10 @@ dialog summary {
     --error: #ff8d9f;
     --field: #08121e;
     --button: #65e4f7;
-    --scan: #94d8ff06
+    --scan: #94d8ff06;
+    --star: #f8f9ff;
+    --star-cool: #aec9ff;
+    --star-warm: #ffc99d
   }
 }
 

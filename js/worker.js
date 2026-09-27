@@ -5,7 +5,7 @@ const BogoWorker = (() => {
   function start(engineData) {
     // One independent sampler per Worker. No shared PRNG state and no synthetic counts.
     let engine, seedView, engineKind, job = null, screenToken = 0, scheduled = false;
-    const queue = new MessageChannel();
+    const queue = new MessageChannel(), WHEEL = BigInt(BOGO.WHEEL);
     const count = () => BigInt.asUintN(64, engine.get_trials());
     queue.port1.onmessage = () => { scheduled = false; tick(); };
     const ready = (async () => {
@@ -34,32 +34,45 @@ const BogoWorker = (() => {
       if (engine.get_found()) {
         const d = BOGO.read(engine, engine.ptr_divisor(), engine.get_found()), q = j.n / d;
         if (d <= 1n || d >= j.n || d * q !== j.n || j.n % d !== 0n) throw Error('Independent factor verification failed.');
-        factor = { d: String(d), q: String(q) };
+        const [v, u] = point(j, d);
+        factor = { d: String(d), q: String(q), v, u };
       }
+      // Background samples travel as numbers only: (v, u, q) triples, oldest first.
+      const fieldSamples = j.samples.take();
       postMessage({ type: 'snapshot', id: j.id, seq, status, trials: String(t), elapsedMs: ms,
         rate: status === 'running' ? j.rates.value(t, ms) : null, factor,
-        sample: j.samplePending ? j.sample : null, fieldSamples: j.fieldSamples, memoryBytes: engine.memory.buffer.byteLength });
+        sample: j.samplePending ? j.sample : null, fieldSamples, memoryBytes: engine.memory.buffer.byteLength },
+        [fieldSamples.buffer]);
       j.samplePending = false;
-      j.fieldSamples = [];
+    }
+    // Background position of a candidate: v is its rank within the wheel (so
+    // excluded multiples leave no gaps), u = d / floor(sqrt(N)).
+    function point(j, d) {
+      const residues = BOGO.getResidues(), rem = Number(d % WHEEL);
+      let lo = 0, hi = residues.length;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (residues[m] < rem) lo = m + 1; else hi = m; }
+      return [Math.min(1 - Number.EPSILON, (lo + .5) / residues.length), Number((d << 32n) / j.root) / 4294967296];
     }
     function captureSample(j, forLog = true, forField = false) {
       const trial = count();
       const found = engine.get_found();
       const d = BOGO.read(engine, engine.ptr_divisor(), found || j.divisorWords.length);
       if (d < 2n || d > j.root) throw Error('Sampled divisor is outside the search range.');
-      // The completed engine verdict is enough for the visual trace. Never
-      // repeat big-integer division solely to produce decorative output.
-      const record = { trial: String(trial), divisor: String(d), hit: !!found };
       if (forLog) {
-        j.sample = { ...record, fromTrial: String(j.lastSampleTrial + 1n),
+        // The log reports the engine's own verdict; no extra arithmetic.
+        j.sample = { trial: String(trial), divisor: String(d), hit: !!found, fromTrial: String(j.lastSampleTrial + 1n),
           tested: String(trial - j.lastSampleTrial) };
         j.lastSampleTrial = trial;
         j.samplePending = true;
       }
       if (forField) {
-        j.fieldSamples.push(record);
+        // Only background samples (at most 100/s for the whole pool) pay one
+        // extra N mod d. |q| = min(r, d - r) / d says how close N / d came to an
+        // integer: 0 exactly for a divisor, uniform on [0, 0.5] otherwise. The
+        // sign tells the side: + when N / d lies just above an integer, - just below.
+        const r = j.n % d, below = r > d - r, m = below ? d - r : r, [v, u] = point(j, d);
         // Bounded even if the UI has stopped acknowledging reports.
-        if (j.fieldSamples.length > 20) j.fieldSamples.splice(0, j.fieldSamples.length - 20);
+        j.samples.push(v, u, (below ? -1 : 1) * Number((m << 24n) / d) / 16777216);
       }
     }
     function finish(j, status) { freeze(j); j.paused = true; j.done = true; report(j, status); }
@@ -128,7 +141,8 @@ const BogoWorker = (() => {
             nextSample: 0, sampleOffset: Math.max(0, Number(m.sampleOffset) || 0),
             sample: null, samplePending: false, lastSampleTrial: 0n,
             fieldInterval: Math.max(50, Math.min(1600, Number(m.fieldInterval) || 50)),
-            fieldOffset: Math.max(0, Number(m.fieldOffset) || 0), nextField: 0, fieldSamples: [] };
+            fieldOffset: Math.max(0, Number(m.fieldOffset) || 0), nextField: 0,
+            samples: new SampleRing(Math.min(SampleRing.RETAINED, Number(m.fieldCapacity) || SampleRing.RETAINED)) };
           job.rates.reset(0n, 0);
           postMessage({ type: 'prepared', id: m.id, candidateCount: String(config.count), engineKind });
           return;
@@ -157,6 +171,7 @@ const BogoWorker = (() => {
       "'use strict';",
       'const BOGO = (' + createBogoMath.toString() + ')();',
       'const RateWindow = ' + RateWindow.toString() + ';',
+      'const SampleRing = ' + SampleRing.toString() + ';',
       '(' + start.toString() + ')(' + JSON.stringify(BogoEngineData) + ');'
     ].join('\n');
     return URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));

@@ -87,7 +87,8 @@ const BogoShare = (() => {
     operation = true; controls(); notice();
     try {
       if (kind === 'text') {
-        const value = BogoCard.text(snapshot);
+        // Sized for a post; the complete digits stay in the image and in Result text.
+        const value = BogoCard.post(snapshot);
         let copied = false;
         if (navigator.clipboard?.writeText && window.isSecureContext) {
           try { await navigator.clipboard.writeText(value); copied = true; } catch (_) { /* Manual fallback below. */ }
@@ -113,9 +114,9 @@ const BogoShare = (() => {
         const cap = capabilities();
         if (cap.shareFile) {
           // No hidden await before this call. The exact preview PNG is shared.
-          await navigator.share({ files: [image.file], title: 'BOGO / FACTOR — ' + (snapshot.name || snapshot.digits + '-digit factorization'),
-            text: snapshot.trials + ' trials · ' + BogoCard.elapsed(snapshot.elapsedMs) + '\n' + BogoCard.URL });
-        } else if (cap.shareText) await navigator.share({ title: 'BOGO / FACTOR', text: BogoCard.text(snapshot) });
+          // No title: some targets print it above the text, repeating the post.
+          await navigator.share({ files: [image.file], text: BogoCard.post(snapshot) });
+        } else if (cap.shareText) await navigator.share({ text: BogoCard.post(snapshot) });
         else throw Error('Device sharing is unavailable. Use SAVE PNG.');
         if (id === generation && dialog.open) notice('Handed to your device’s share menu.');
       }
