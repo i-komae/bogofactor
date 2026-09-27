@@ -228,6 +228,7 @@
     const input = $('n-input');
     const digits = input.value.normalize('NFKC').replace(/[\s,_]/g, '').length;
     input.classList.toggle('long', digits > 15);
+    input.classList.toggle('compact', digits <= 61);
     $('input-digits').textContent = /^\d+$/.test(input.value.normalize('NFKC').replace(/[\s,_]/g, '')) ? `${digits.toLocaleString('en-US')} DIGITS` : '';
     input.style.height = '';
   }

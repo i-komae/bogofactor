@@ -175,141 +175,96 @@ class WorkerMeters {
   }
 }
 
-/** Decorative depth behind the reactor. Fixed geometry and a cached backplate;
- * no trial data, candidate map, independent timer or additional animation loop.
- * All motion uses the reactor's clock, so pause/visibility/FX rules stay shared.
- */
+/** An optical instrument backplate, on the reactor's existing clock. Geometry
+ * is cached at layout/theme changes; moving arcs stay within its annulus.
+ * This is decoration, not a candidate-space map or a progress indicator. */
 class CoreBackdrop {
   constructor() {
     this.plate = document.createElement('canvas');
-    this.routes = [];
     this.key = '';
-    this.meanMs = 0;
     this.frames = 0;
+    this.meanMs = 0;
   }
   prepare(width, height, cx, cy, radius, palette, dpr) {
-    const key = [width, height, radius, dpr, palette.accent, palette.second, palette.line].join('|');
-    if (key === this.key) return;
+    const key = [width, height, cx, cy, radius, dpr, palette.accent, palette.second, palette.line].join('|');
+    if (this.key === key) return;
     this.key = key;
     this.plate.width = Math.ceil(width * dpr);
     this.plate.height = Math.ceil(height * dpr);
     const g = this.plate.getContext('2d');
     if (!g) return;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.routes.length = 0;
-    // Asymmetric routed traces terminate outside the existing reactor ring.
-    // Their endpoints never encroach on the centre's state or result text.
-    const count = width < 380 ? 12 : 18;
-    for (let i = 0; i < count; i++) {
-      const a = i * Math.PI * 2 / count + .17 + Math.sin(i * 2.13) * .07;
-      const outer = Math.max(width, height) * .86;
-      const bend = radius * (1.62 + (i % 3) * .12);
-      const turn = a + (i % 2 ? .09 : -.14);
-      const pts = [
-        [cx + Math.cos(a) * outer, cy + Math.sin(a) * outer * .78],
-        [cx + Math.cos(a) * bend, cy + Math.sin(a) * bend * .90],
-        [cx + Math.cos(turn) * radius * 1.30, cy + Math.sin(turn) * radius * 1.30],
-        [cx + Math.cos(turn) * radius * 1.11, cy + Math.sin(turn) * radius * 1.11]
-      ];
-      let length = 0;
-      const segments = [];
-      for (let k = 1; k < pts.length; k++) {
-        const dx = pts[k][0] - pts[k - 1][0], dy = pts[k][1] - pts[k - 1][1];
-        const span = Math.hypot(dx, dy);
-        if (span > .001) segments.push({ x: pts[k - 1][0], y: pts[k - 1][1], dx: dx / span, dy: dy / span, start: length, span });
-        length += span;
+    const tau = Math.PI * 2;
+    // Fine registration dots belong to the whole viewport; no floating routes,
+    // pseudo-data labels or large waves reaching across neighbouring panels.
+    g.fillStyle = palette.accent;
+    for (let y = 16; y < height - 12; y += 20) {
+      for (let x = 16; x < width - 12; x += 20) {
+        const distance = Math.hypot(x - cx, y - cy);
+        if (distance < radius * 1.09) continue;
+        g.globalAlpha = distance < radius * 1.5 ? .15 : .065;
+        g.fillRect(x, y, .8, .8);
       }
-      this.routes.push({ segments, length, end: pts[3], offset: i * .61803398875, speed: 48 + i % 4 * 9 });
-      g.strokeStyle = i % 3 ? palette.accent : palette.second;
-      g.lineWidth = .7;
-      g.globalAlpha = i % 3 ? .15 : .22;
-      g.beginPath(); g.moveTo(...pts[0]);
-      for (let k = 1; k < pts.length; k++) g.lineTo(...pts[k]);
-      g.stroke();
-      g.globalAlpha = .26;
-      g.strokeRect(pts[2][0] - 1.7, pts[2][1] - 1.7, 3.4, 3.4);
     }
-    // Rear chamber contours, intentionally oblique rather than more flat circles.
-    g.save(); g.translate(cx, cy);
-    for (let i = 0; i < 3; i++) {
-      g.strokeStyle = i === 1 ? palette.second : palette.accent;
-      g.globalAlpha = i === 1 ? .14 : .11;
-      g.lineWidth = .65;
-      g.beginPath();
-      g.ellipse(0, 0, radius * (1.63 + i * .46), radius * (1.06 + i * .30), -.24, 0, Math.PI * 2);
-      g.stroke();
-    }
-    // Small registration marks create spatial scale without unreadable labels.
-    g.strokeStyle = palette.accent; g.globalAlpha = .20; g.lineWidth = .7;
+    g.translate(cx, cy);
+    // One shared centre, with deliberately broken arcs rather than a collection
+    // of unrelated ellipses. Everything scales with the existing reactor ring.
+    g.strokeStyle = palette.line; g.globalAlpha = .7; g.lineWidth = .7;
+    g.beginPath(); g.arc(0, 0, radius * 1.20, 0, tau); g.stroke();
+    g.strokeStyle = palette.accent; g.globalAlpha = .20;
     g.beginPath();
-    for (let i = 0; i < 28; i++) {
-      const a = i * 2.39996323, r = radius * (1.5 + (i % 7) * .22);
-      const x = Math.cos(a) * r, y = Math.sin(a) * r * .78;
-      if (Math.hypot(x, y) < radius * 1.17) continue;
-      g.moveTo(x - 1.5, y); g.lineTo(x + 1.5, y);
-      if (i % 3 === 0) { g.moveTo(x, y - 1.5); g.lineTo(x, y + 1.5); }
+    for (let i = 0; i < 120; i++) {
+      const a = i * tau / 120;
+      const inner = radius * 1.24, outer = inner + (i % 10 === 0 ? 7 : i % 5 === 0 ? 4 : 2);
+      g.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
+      g.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
     }
-    g.stroke(); g.restore();
-  }
-  trace(ctx, route, from, to) {
-    for (const segment of route.segments) {
-      const lo = Math.max(from, segment.start), hi = Math.min(to, segment.start + segment.span);
-      if (hi <= lo) continue;
-      const a = lo - segment.start, b = hi - segment.start;
-      ctx.moveTo(segment.x + segment.dx * a, segment.y + segment.dy * a);
-      ctx.lineTo(segment.x + segment.dx * b, segment.y + segment.dy * b);
+    g.stroke();
+    const sections = [[-.64, -.18, 1.15], [.30, 1.02, 1.15], [1.35, 2.17, 1.13], [2.61, 3.55, 1.15], [4.0, 4.58, 1.13]];
+    g.strokeStyle = palette.second; g.globalAlpha = .22; g.lineWidth = 2;
+    g.beginPath();
+    for (const [a, b, r] of sections) {
+      g.moveTo(Math.cos(a) * radius * r, Math.sin(a) * radius * r);
+      g.arc(0, 0, radius * r, a, b);
     }
+    g.stroke();
+    // A pair of angular brackets establishes a frame, not additional gauges.
+    g.strokeStyle = palette.accent; g.globalAlpha = .24; g.lineWidth = .8;
+    const x = Math.min(cx - 22, radius * 1.45), y = Math.min(cy - 14, radius * .88);
+    g.beginPath();
+    g.moveTo(-x, -y + 24); g.lineTo(-x, -y + 8); g.lineTo(-x + 8, -y); g.lineTo(-x + 26, -y);
+    g.moveTo(x - 26, y); g.lineTo(x - 8, y); g.lineTo(x, y - 8); g.lineTo(x, y - 24);
+    g.stroke();
   }
   draw(ctx, width, height, cx, cy, radius, palette, dpr, phase, state, enabled) {
     const started = performance.now();
     this.prepare(width, height, cx, cy, radius, palette, dpr);
-    ctx.save();
-    ctx.globalAlpha = 1;
+    ctx.save(); ctx.globalAlpha = 1;
     ctx.drawImage(this.plate, 0, 0, width, height);
-    const active = state === 'running' || state === 'screening';
-    const color = state === 'found' ? palette.success : state === 'screening' ? palette.amber : palette.accent;
     if (enabled) {
-      // Three bounded trail sections: no full-surface blur or pixel reads.
-      for (let pass = 0; pass < 3; pass++) {
-        ctx.strokeStyle = pass === 0 ? palette.second : color;
-        ctx.globalAlpha = (active ? .72 : .16) * [.16, .40, .85][pass];
-        ctx.lineWidth = pass === 0 ? 2.1 : pass === 1 ? 1.2 : 1.0;
-        ctx.beginPath();
-        for (let i = 0; i < this.routes.length; i++) {
-          const route = this.routes[i];
-          const cycle = route.length + 130 + i % 3 * 40;
-          let head = (phase * route.speed + route.offset * cycle) % cycle;
-          if (i % 4 === 0) head = route.length - head;
-          const from = head - 36 + pass * 12;
-          this.trace(ctx, route, from, from + 12);
-        }
-        ctx.stroke();
+      const active = state === 'running' || state === 'screening';
+      const color = state === 'found' ? palette.success : state === 'screening' ? palette.amber : palette.accent;
+      ctx.translate(cx, cy);
+      // Short, tapered arcs travel on the backplate's tracks. Layered strokes
+      // give a soft edge without filters, shadows, masks or pixel operations.
+      const angle = phase * .22 - Math.PI / 2;
+      for (let layer = 0; layer < 3; layer++) {
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = (active ? .54 : .16) * [.12, .30, .85][layer];
+        ctx.lineWidth = [6, 2.6, 1][layer];
+        ctx.beginPath(); ctx.arc(0, 0, radius * 1.20, angle - .35, angle + .06); ctx.stroke();
       }
-      // Broad, dim pulses recede through the rear chamber, behind the globe.
-      // They are clipped out of the text's quiet aperture, not drawn over it.
-      ctx.save();
-      ctx.beginPath(); ctx.rect(0, 0, width, height);
-      ctx.moveTo(cx + radius * 1.07, cy);
-      ctx.arc(cx, cy, radius * 1.07, 0, Math.PI * 2, true); ctx.clip('evenodd');
-      for (let i = 0; i < 3; i++) {
-        const u = (phase * .16 + i / 3) % 1;
-        const fade = Math.sin(Math.PI * u) ** 2;
-        ctx.strokeStyle = i === 1 ? palette.second : color;
-        ctx.globalAlpha = fade * (active ? .27 : .065);
-        ctx.lineWidth = i === 1 ? 1.3 : .85;
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, radius * (1.2 + u * 2.0), radius * (.85 + u * 1.10), -.24, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      ctx.restore();
+      ctx.strokeStyle = palette.second; ctx.globalAlpha = active ? .48 : .12;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(0, 0, radius * 1.13, -angle * .71 + 1.8, -angle * .71 + 2.14); ctx.stroke();
     }
     ctx.restore();
     this.frames++;
     this.meanMs += (performance.now() - started - this.meanMs) * .05;
   }
   get diagnostics() {
-    return { frames: this.frames, meanDrawMs: this.meanMs, routes: this.routes.length,
-      cachedPixels: this.plate.width * this.plate.height };
+    return { frames: this.frames, meanDrawMs: this.meanMs,
+      cachedPixels: this.plate.width * this.plate.height, design: 'instrument-aperture' };
   }
 }
 
@@ -367,18 +322,12 @@ const BogoVisual = (() => {
     if (!ctx || !palette.accent || width < 70 || height < 80) return;
     const t0 = performance.now(), tau = Math.PI * 2;
     ctx.clearRect(0, 0, width, height); ctx.save();
-    const cx = width / 2, cy = height * .45, R = Math.min(height * .385, width * .34);
+    const cx = width / 2, cy = height * .48, R = Math.min(height * .35, width * .34);
     const active = state === 'running' || state === 'screening';
     const main = state === 'found' ? palette.success : state === 'paused' || state === 'screening' ? palette.amber : palette.accent;
     backdrop.draw(ctx, width, height, cx, cy, R, palette, dpr, phase, state, wanted && !reduce.matches);
     ctx.translate(cx, cy);
-    // Long orthogonal registration axes anchor the rotating display.
-    ctx.strokeStyle = palette.fine; ctx.lineWidth = .8; ctx.globalAlpha = .9; ctx.beginPath();
-    line(-cx + 17, 0, cx - 17, 0); line(0, -cy + 14, 0, height - cy - 15);
-    for (const x of [-1, 1]) for (const y of [-1, 1]) {
-      const px = x * (R + 22), py = y * (R - 13); line(px - 4, py, px + 4, py); line(px, py - 4, px, py + 4);
-    }
-    ctx.stroke(); ring(R + 8, 0, tau, palette.line, .8, .8);
+    ring(R + 8, 0, tau, palette.line, .8, .8);
     ctx.strokeStyle = main; ctx.lineWidth = .8; ctx.globalAlpha = .5; ctx.beginPath();
     for (let i = 0; i < 90; i++) {
       const a = i * tau / 90, l = i % 5 ? 3 : 8;
@@ -470,17 +419,6 @@ const BogoVisual = (() => {
       line(x, y, x + Math.sin(a) * 4, y - Math.cos(a) * 4);
     }
     ctx.stroke();
-    // Sparse fixed registration marks share the globe's coordinates. No
-    // mirrored, expanding strips compete with the title or central readout.
-    if (width > 510) {
-      ctx.globalAlpha = .35; ctx.strokeStyle = palette.line; ctx.lineWidth = .8;
-      ctx.beginPath();
-      line(-R - 40, R * .54, -R - 24, R * .54);
-      line(-R - 24, R * .54, -R - 16, R * .66);
-      line(R + 20, -R * .57, R + 32, -R * .71);
-      line(R + 32, -R * .71, R + 48, -R * .71);
-      ctx.stroke();
-    }
     ctx.restore(); ctx.globalAlpha = 1;
     frames++; drawMs = drawMs * .95 + (performance.now() - t0) * .05;
   }
