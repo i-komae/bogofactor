@@ -288,8 +288,8 @@ body[data-fx=full][data-state=found].hit-effect .lock-banner { animation: lock-a
   .factor-values.long { font-size: 11px; }
   .copy { grid-column: 2; grid-row: 1; margin: 4px 8px 4px 0; padding: 5px 8px; min-height: 32px; font-size: 10px; }
   body[data-view=live] .mobile-dock { display: flex; flex: 0 0 46px; gap: 8px; margin: 0; padding: 0; }
-  .mobile-dock .primary { flex: 1; }
-  .mobile-dock .abort { flex: 0 0 70px; }
+  .mobile-dock .primary { flex: 1; order: 0; }
+  .mobile-dock .abort { flex: 0 0 70px; order: 1; }
   .mobile-dock .primary, .mobile-dock .abort { min-height: 46px; }
   body[data-state=found] .lock-banner { padding: 9px 8px; gap: 3px; }
   .locked-divisor { font-size: 15px; }
