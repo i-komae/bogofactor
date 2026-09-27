@@ -175,87 +175,6 @@ class WorkerMeters {
   }
 }
 
-/** An optical instrument backplate, on the reactor's existing clock. Geometry
- * is cached at layout/theme changes; moving arcs stay within its annulus.
- * This is decoration, not a candidate-space map or a progress indicator. */
-class CoreBackdrop {
-  constructor() {
-    this.plate = document.createElement('canvas');
-    this.key = '';
-    this.frames = 0;
-    this.meanMs = 0;
-  }
-  prepare(width, height, cx, cy, radius, palette, dpr) {
-    const key = [width, height, cx, cy, radius, dpr, palette.accent, palette.second, palette.line].join('|');
-    if (this.key === key) return;
-    this.key = key;
-    this.plate.width = Math.ceil(width * dpr);
-    this.plate.height = Math.ceil(height * dpr);
-    const g = this.plate.getContext('2d');
-    if (!g) return;
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const tau = Math.PI * 2;
-    // Fine registration dots belong to the whole viewport; no floating routes,
-    // pseudo-data labels or large waves reaching across neighbouring panels.
-    g.fillStyle = palette.accent;
-    for (let y = 16; y < height - 12; y += 20) {
-      for (let x = 16; x < width - 12; x += 20) {
-        const distance = Math.hypot(x - cx, y - cy);
-        if (distance < radius * 1.09) continue;
-        g.globalAlpha = distance < radius * 1.5 ? .15 : .065;
-        g.fillRect(x, y, .8, .8);
-      }
-    }
-    g.translate(cx, cy);
-    // A single quiet outer reference. The foreground already supplies the
-    // moving reticle and scale; do not stack a second dense dial over it.
-    g.strokeStyle = palette.line; g.globalAlpha = .36; g.lineWidth = .65;
-    g.beginPath();
-    for (const [a, b] of [[-.78, .12], [1.55, 2.52], [3.70, 4.20]]) {
-      g.moveTo(Math.cos(a) * radius * 1.20, Math.sin(a) * radius * 1.20);
-      g.arc(0, 0, radius * 1.20, a, b);
-    }
-    g.stroke();
-    // A pair of angular brackets establishes a frame, not additional gauges.
-    g.strokeStyle = palette.accent; g.globalAlpha = .24; g.lineWidth = .8;
-    const x = Math.min(cx - 22, radius * 1.45), y = Math.min(cy - 14, radius * .88);
-    g.beginPath();
-    g.moveTo(-x, -y + 24); g.lineTo(-x, -y + 8); g.lineTo(-x + 8, -y); g.lineTo(-x + 26, -y);
-    g.moveTo(x - 26, y); g.lineTo(x - 8, y); g.lineTo(x, y - 8); g.lineTo(x, y - 24);
-    g.stroke();
-  }
-  draw(ctx, width, height, cx, cy, radius, palette, dpr, phase, state, enabled) {
-    const started = performance.now();
-    this.prepare(width, height, cx, cy, radius, palette, dpr);
-    ctx.save(); ctx.globalAlpha = 1;
-    ctx.drawImage(this.plate, 0, 0, width, height);
-    if (enabled) {
-      const active = state === 'running' || state === 'screening';
-      const color = state === 'found' ? palette.success : state === 'screening' ? palette.amber : palette.accent;
-      ctx.translate(cx, cy);
-      // Short, tapered arcs travel on the backplate's tracks. Layered strokes
-      // give a soft edge without filters, shadows, masks or pixel operations.
-      const angle = phase * .22 - Math.PI / 2;
-      for (let layer = 0; layer < 3; layer++) {
-        ctx.strokeStyle = color;
-        ctx.globalAlpha = (active ? .32 : .12) * [.12, .30, .85][layer];
-        ctx.lineWidth = [6, 2.6, 1][layer];
-        ctx.beginPath(); ctx.arc(0, 0, radius * 1.20, angle - .35, angle + .06); ctx.stroke();
-      }
-      ctx.strokeStyle = palette.second; ctx.globalAlpha = active ? .48 : .12;
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(0, 0, radius * 1.13, -angle * .71 + 1.8, -angle * .71 + 2.14); ctx.stroke();
-    }
-    ctx.restore();
-    this.frames++;
-    this.meanMs += (performance.now() - started - this.meanMs) * .05;
-  }
-  get diagnostics() {
-    return { frames: this.frames, meanDrawMs: this.meanMs,
-      cachedPixels: this.plate.width * this.plate.height, design: 'instrument-aperture' };
-  }
-}
-
 /** Presentation only. Never reads or changes the engine's PRNG or trial counter. */
 const BogoVisual = (() => {
   const $ = id => document.getElementById(id);
@@ -278,7 +197,6 @@ const BogoVisual = (() => {
   let lastTelemetry = -Infinity;
   const workerMeters = new WorkerMeters($('worker-lanes'));
   const activity = new EventStream($('event-log'));
-  const backdrop = new CoreBackdrop();
   // Equal angular rings give a stable wireframe, not fabricated factor candidates.
   for (let lat = 0; lat < 9; lat++) for (let lon = 0; lon < 20; lon++) {
     const a = (lat + 1) * Math.PI / 10, b = lon * Math.PI / 10, i = (lat * 20 + lon) * 3;
@@ -310,12 +228,17 @@ const BogoVisual = (() => {
     if (!ctx || !palette.accent || width < 70 || height < 80) return;
     const t0 = performance.now(), tau = Math.PI * 2;
     ctx.clearRect(0, 0, width, height); ctx.save();
-    const cx = width / 2, cy = height * .48, R = Math.min(height * .35, width * .34);
+    const cx = width / 2, cy = height * .45, R = Math.min(height * .385, width * .34);
     const active = state === 'running' || state === 'screening';
     const main = state === 'found' ? palette.success : state === 'paused' || state === 'screening' ? palette.amber : palette.accent;
-    backdrop.draw(ctx, width, height, cx, cy, R, palette, dpr, phase, state, wanted && !reduce.matches);
     ctx.translate(cx, cy);
-    ring(R + 8, 0, tau, palette.line, .8, .8);
+    // Long orthogonal registration axes anchor the rotating display.
+    ctx.strokeStyle = palette.fine; ctx.lineWidth = .8; ctx.globalAlpha = .9; ctx.beginPath();
+    line(-cx + 17, 0, cx - 17, 0); line(0, -cy + 14, 0, height - cy - 15);
+    for (const x of [-1, 1]) for (const y of [-1, 1]) {
+      const px = x * (R + 22), py = y * (R - 13); line(px - 4, py, px + 4, py); line(px, py - 4, px, py + 4);
+    }
+    ctx.stroke(); ring(R + 8, 0, tau, palette.line, .8, .8);
     ctx.strokeStyle = main; ctx.lineWidth = .8; ctx.globalAlpha = .5; ctx.beginPath();
     for (let i = 0; i < 90; i++) {
       const a = i * tau / 90, l = i % 5 ? 3 : 8;
@@ -334,7 +257,7 @@ const BogoVisual = (() => {
     }
     ctx.stroke(); ctx.restore();
     const s = Math.sin(phase * .23), c = Math.cos(phase * .23), tilt = .32;
-    const size = R * .80;
+    const size = R * .68;
     for (let i = 0; i < points.length; i += 3) {
       const x = points[i] * c - points[i + 2] * s, z = points[i] * s + points[i + 2] * c;
       const y = points[i + 1] * Math.cos(tilt) - z * Math.sin(tilt), zz = points[i + 1] * Math.sin(tilt) + z * Math.cos(tilt);
@@ -407,6 +330,17 @@ const BogoVisual = (() => {
       line(x, y, x + Math.sin(a) * 4, y - Math.cos(a) * 4);
     }
     ctx.stroke();
+    // Sparse fixed registration marks share the globe's coordinates. No
+    // mirrored, expanding strips compete with the title or central readout.
+    if (width > 510) {
+      ctx.globalAlpha = .35; ctx.strokeStyle = palette.line; ctx.lineWidth = .8;
+      ctx.beginPath();
+      line(-R - 40, R * .54, -R - 24, R * .54);
+      line(-R - 24, R * .54, -R - 16, R * .66);
+      line(R + 20, -R * .57, R + 32, -R * .71);
+      line(R + 32, -R * .71, R + 48, -R * .71);
+      ctx.stroke();
+    }
     ctx.restore(); ctx.globalAlpha = 1;
     frames++; drawMs = drawMs * .95 + (performance.now() - t0) * .05;
   }
@@ -579,6 +513,6 @@ const BogoVisual = (() => {
     state: change, snapshot: update, input, reset, toast,
     ready(kind) { $('core-engine').textContent = 'WASM / ' + kind.toUpperCase(); $('engine-mode').textContent = 'WASM / ' + kind.toUpperCase(); log('CORE', 'WASM/' + kind.toUpperCase() + ' ready'); log('RNG', 'ChaCha20 · local seed'); },
     error(text) { log('FAULT', text, 'warn'); },
-    get diagnostics() { return { state, frames, meanDrawMs: drawMs, active: !!runningFrame, fullMotion: wanted && !reduce.matches, visible, inView, sound: BogoAudio.diagnostics.wanted, sampleCount, logRows: $('event-log').children.length, canvasPixels: canvas.width * canvas.height, music: BogoAudio.diagnostics, scanGeometry: 'projected-spherical-latitude', backdrop: backdrop.diagnostics, workerMeters: workerMeters.diagnostics }; }
+    get diagnostics() { return { state, frames, meanDrawMs: drawMs, active: !!runningFrame, fullMotion: wanted && !reduce.matches, visible, inView, sound: BogoAudio.diagnostics.wanted, sampleCount, logRows: $('event-log').children.length, canvasPixels: canvas.width * canvas.height, music: BogoAudio.diagnostics, scanGeometry: 'projected-spherical-latitude', workerMeters: workerMeters.diagnostics }; }
   };
 })();
