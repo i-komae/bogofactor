@@ -7,6 +7,7 @@ class EventStream {
     this.root = root;
     this.preview = document.getElementById('core-activity');
     this.mobile = matchMedia('(max-width:760px), (pointer:coarse) and (max-height:590px)');
+    this.mobile.addEventListener('change', () => this.syncPreview());
     this.seen = new Map();
     this.recentStyles = [];
     this.pending = [];
@@ -31,6 +32,13 @@ class EventStream {
     root.addEventListener('scroll', () => {
       this.following = root.scrollHeight - root.scrollTop - root.clientHeight < 5;
     }, { passive: true });
+  }
+  syncPreview() {
+    if (!this.preview || !this.mobile.matches) return;
+    const rows = Array.from(this.root.children).slice(-2).map(row => {
+      const copy = row.cloneNode(true); copy.removeAttribute('title'); return copy;
+    });
+    this.preview.replaceChildren(...rows);
   }
   quiet() { return this.reduce.matches || document.body.dataset.fx === 'quiet' || document.hidden; }
   cancelScroll() { this.pending.length = 0; }

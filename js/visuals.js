@@ -8,6 +8,7 @@ class WorkerMeters {
   constructor(root) {
     this.root = root;
     this.lanes = [];
+    this.selectedCount = 1;
     this.enabled = true;
     this.visible = !document.hidden;
     this.inView = true;
@@ -73,10 +74,18 @@ class WorkerMeters {
     }
     if (visible) this.schedule();
   }
+  select(count) {
+    this.selectedCount = Math.max(1, Math.min(32, Math.floor(Number(count) || 1)));
+    this.rebuild(this.selectedCount);
+    this.update({ status: 'idle', workers: [] });
+  }
   rebuild(count) {
     this.stopFrame();
     for (const lane of this.lanes) lane.metric.dispose();
     this.root.replaceChildren(); this.lanes = [];
+    this.root.dataset.columns = count > 16 ? '2' : '1';
+    this.root.style.setProperty('--lane-rows', String(count > 16 ? Math.ceil(count / 2) : count));
+    this.root.setAttribute('aria-label', count + ' worker slots; current throughput relative to the fastest active worker');
     for (let i = 0; i < count; i++) {
       const row = document.createElement('div'); row.className = 'worker-lane';
       const name = document.createElement('span'); name.textContent = String(i + 1).padStart(2, '0');
@@ -96,8 +105,13 @@ class WorkerMeters {
     this.measure();
   }
   update(snapshot) {
-    const data = snapshot.workers || [];
-    if (this.lanes.length !== data.length) this.rebuild(data.length);
+    const reported = snapshot.workers || [];
+    // Selection owns layout. Screening and small trial quotas must not collapse
+    // the reserved slots or move the activity stream when workers start/stop.
+    const count = Math.max(this.selectedCount, reported.length);
+    if (this.lanes.length !== count) this.rebuild(count);
+    const data = Array.from({ length: count }, (_, index) => reported[index] ||
+      { index, state: 'idle', rate: 0, trials: '0' });
     let maximum = 1, live = 0;
     for (const worker of data) {
       if (worker.state === 'running') {
@@ -166,9 +180,9 @@ class WorkerMeters {
     lane.wrappedGlint.style.opacity = opacity;
     lane.pulseLeft = left; lane.pulseWidth = width;
   }
-  reset() { this.rebuild(0); }
+  reset() { this.select(this.selectedCount); }
   get diagnostics() {
-    return { measurements: this.measurements, frames: this.frames, active: !!this.raf,
+    return { selectedCount: this.selectedCount, measurements: this.measurements, frames: this.frames, active: !!this.raf,
       lanes: this.lanes.map(lane => ({ state: lane.state, target: lane.target, length: lane.length,
         width: lane.width, pulseLeft: lane.pulseLeft, pulseWidth: lane.pulseWidth,
         laps: lane.laps, speed: this.pulseSpeed, meter: lane.metric.diagnostics })) };
@@ -198,6 +212,7 @@ const BogoVisual = (() => {
   const workerMeters = new WorkerMeters($('worker-lanes'));
   const activity = new EventStream($('event-log'));
   const sampleField = new SampleField(canvas);
+  const targetBits = new TargetBits($('target-bits'), $('target-stream'));
   const rims = new PanelRims(Array.from(document.querySelectorAll('.panel.core, .throughput-panel, .panel.payload, .panel.output')));
   // Equal angular rings give a stable wireframe, not fabricated factor candidates.
   for (let lat = 0; lat < 9; lat++) for (let lon = 0; lon < 20; lon++) {
@@ -231,7 +246,10 @@ const BogoVisual = (() => {
     const t0 = performance.now(), tau = Math.PI * 2;
     rims.draw(t0, state, wanted && !reduce.matches && visible && inView && state !== 'paused', palette);
     ctx.clearRect(0, 0, width, height); ctx.save();
-    const cx = width / 2, cy = height * .45, R = Math.min(height * .385, width * .34);
+    // One shared geometric centre for the full dot rectangle, globe and banner.
+    // Reserve at least 24px outside the outer (R + 20px) tick/worker ring.
+    const cx = width / 2, cy = height / 2;
+    const R = Math.max(22, Math.min(width * .34, width / 2 - 44, height / 2 - 44));
     const active = state === 'running' || state === 'screening';
     const main = state === 'found' ? palette.success : state === 'paused' || state === 'screening' ? palette.amber : palette.accent;
     sampleField.prepare(width, height, cx, cy, R, palette, dpr);
@@ -460,14 +478,11 @@ const BogoVisual = (() => {
   function input(n) {
     if (n === lastInput) return;
     lastInput = n; target = n;
-    let hex = '';
-    try { hex = n ? BigInt(n).toString(16).toUpperCase() : ''; } catch (_) {}
-    // This is N itself, not a repeated decorative stream or invented addresses.
-    $('target-stream').textContent = hex ? hex.match(/.{1,4}/g).join(' ') : '—';
+    targetBits.set(n);
   }
   function reset() {
     // Retain the previous search raster while editing; begin() clears it.
-    lastTelemetry = -Infinity; samples.fill(0); sampleHead = 0; sampleCount = 0; activity.reset(); lastSnapshot = null; workerMeters.update({ workers: [] });
+    lastTelemetry = -Infinity; samples.fill(0); sampleHead = 0; sampleCount = 0; activity.reset(); lastSnapshot = null; workerMeters.reset();
     $('rate-path').setAttribute('d', 'M0 70H260'); $('rate-area').setAttribute('d', 'M0 76H260Z'); peakDisplay?.reset();
     $('rate-chart').setAttribute('aria-label', 'Measured throughput history; no data yet');
     clearTimeout(hitTimer); body.classList.remove('hit-effect');
@@ -504,9 +519,9 @@ const BogoVisual = (() => {
   document.addEventListener('keydown', dismissIntro, { once: true });
   colors(); size(); syncMotion(); log('BOOT', 'local engine initializing');
   return {
-    state: change, snapshot: update, input, reset, toast,
-    ready(kind) { $('core-engine').textContent = 'WASM / ' + kind.toUpperCase(); $('engine-mode').textContent = 'WASM / ' + kind.toUpperCase(); log('CORE', 'WASM/' + kind.toUpperCase() + ' ready'); log('RNG', 'ChaCha20 · local seed'); },
+    state: change, snapshot: update, input, reset, toast, workers(count) { workerMeters.select(count); },
+    ready(kind) { $('core-engine').textContent = 'WASM / ' + kind.toUpperCase(); log('CORE', 'WASM/' + kind.toUpperCase() + ' ready'); log('RNG', 'ChaCha20 · local seed'); log('SAMPLER', 'wheel/17'); log('DRAW', 'uniform · with replacement'); },
     error(text) { log('FAULT', text, 'warn'); },
-    get diagnostics() { return { state, frames, meanDrawMs: drawMs, active: !!runningFrame, fullMotion: wanted && !reduce.matches, visible, inView, sound: BogoAudio.diagnostics.wanted, sampleCount, logRows: $('event-log').children.length, canvasPixels: canvas.width * canvas.height, music: BogoAudio.diagnostics, scanGeometry: 'projected-spherical-latitude', sampleField: sampleField.diagnostics, rims: rims.diagnostics, workerMeters: workerMeters.diagnostics }; }
+    get diagnostics() { return { state, frames, meanDrawMs: drawMs, active: !!runningFrame, fullMotion: wanted && !reduce.matches, visible, inView, sound: BogoAudio.diagnostics.wanted, sampleCount, logRows: $('event-log').children.length, canvasPixels: canvas.width * canvas.height, music: BogoAudio.diagnostics, scanGeometry: 'projected-spherical-latitude', sampleField: sampleField.diagnostics, targetBits: targetBits.diagnostics, rims: rims.diagnostics, workerMeters: workerMeters.diagnostics }; }
   };
 })();

@@ -43,6 +43,8 @@
   for (let i = 1; i <= maxWorkers; i++) $('workers').add(new Option(String(i).padStart(2,'0') + (i === 1 ? ' WORKER' : ' WORKERS'), String(i)));
   $('workers-hint').textContent = '/ ' + logical + ' LOGICAL';
   $('workers').value = String(defaultWorkers);
+  fx('workers', defaultWorkers);
+  $('workers').addEventListener('change', () => { if (!busy()) fx('workers', Number($('workers').value)); });
   const counter = new ExactCounter($('counter-reels'), $('exact-count'), $('trial-count'));
   counter.set(0n, true);
   const speedDisplay = new RollingMetric($('rate'), 1600, $('rate-unit'));

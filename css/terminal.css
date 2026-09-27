@@ -647,7 +647,7 @@ textarea[aria-invalid=true] {
   flex: 1;
   min-height: 272px;
   max-height: 350px;
-  background: radial-gradient(ellipse at 50% 43%,var(--accent-soft),transparent 62%);
+  background: var(--panel);
 }
 
 #reactor {
@@ -666,7 +666,7 @@ textarea[aria-invalid=true] {
   justify-content: center;
   pointer-events: none;
   text-align: center;
-  inset: 45% 0 auto;
+  inset: 50% 0 auto;
   transform: translateY(-50%);
   height: auto;
   flex-direction: column;
@@ -697,14 +697,7 @@ textarea[aria-invalid=true] {
   letter-spacing: .15em;
 }
 
-.core-view:after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(transparent 0 3px,var(--scan) 3px 4px);
-  opacity: .7;
-}
+
 
 .trial-block {
   padding: 7px 23px 10px;
@@ -754,7 +747,7 @@ textarea[aria-invalid=true] {
   padding: 17px 23px;
   margin: 0;
   border-top: 1px solid var(--line);
-  background: var(--panel-alt);
+  background: var(--panel);
   min-width: 0;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
@@ -875,30 +868,9 @@ textarea[aria-invalid=true] {
   letter-spacing: .05em;
 }
 
-.runtime-list {
-  margin: 16px 0 0;
-  font: 8px var(--mono);
-  letter-spacing: .035em;
-  font-size: 9px;
-  margin-top: 13px;
-}
 
-.runtime-list>div {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  border-top: 1px solid var(--fine);
-  padding: 7px 0;
-}
 
-.runtime-list dt {
-  color: var(--muted);
-}
 
-.runtime-list dd {
-  margin: 0;
-  color: var(--ink);
-}
 
 .log-panel {
   display: flex;
@@ -1099,9 +1071,6 @@ body[data-state=running] .core {
   border-color: var(--accent);
 }
 
-body[data-state=running] .core-view {
-  box-shadow: inset 0 0 70px var(--accent-soft);
-}
 
 body[data-state=screening] .state-indicator {
   color: var(--amber);
@@ -1336,8 +1305,8 @@ body[data-state=paused] .terminal-prompt i {
   display: grid;
   gap: 6px;
   margin-top: 10px;
-  max-height: 155px;
-  overflow: auto;
+  max-height: none;
+  overflow: hidden;
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }

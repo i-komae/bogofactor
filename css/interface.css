@@ -13,7 +13,7 @@
 .counter-heading h3, .stats dt, .worker-heading { font-size: 10px; letter-spacing: .095em; }
 .state-indicator, .live-tag { font-size: 10px; letter-spacing: .04em; }
 .worker-lane { font-size: 10px; }
-.telemetry-label { font-size: 10px; }
+.telemetry-label { font-size: 10px; height: 16px; line-height: 16px; }
 .chart-axis { font-size: 9px; }
 .terminal-prompt { font-size: 10px; }
 .primary, .abort, .copy { font-size: 12px; }
@@ -135,8 +135,12 @@ h1 { font-size: clamp(30px,3vw,44px); }
 .target-data .candidate-block output { font-size: 24px; line-height: 1.4; }
 .candidate-note { display: none; }
 .target-dump { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 48px; border-top: 1px solid var(--fine); padding-top: 8px; }
-.target-dump h3 { flex: 0 0 auto; margin: 0 0 6px; font: 9px/1.4 var(--mono); letter-spacing: .10em; color: var(--muted); }
-.target-dump #target-stream { flex: 1 1 auto; display: block; margin: 0; padding: 0; min-height: 20px; width: 100%; max-width: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/20px var(--mono); letter-spacing: .05em; color: var(--accent); overscroll-behavior: contain; scrollbar-width: thin; }
+.target-dump h3 { flex: 0 0 auto; margin: 0; font: 9px/1.4 var(--mono); letter-spacing: .10em; color: var(--muted); }
+.target-representation-heading { display: flex; flex: 0 0 20px; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+#target-representation-toggle { border: 0; padding: 3px 0 3px 10px; background: none; color: var(--accent); font: 9px/14px var(--mono); letter-spacing: .06em; }
+.target-representation { flex: 1 1 auto; position: relative; min-height: 20px; }
+#target-bits { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+.target-dump #target-stream { position: absolute; top: 0; left: 0; display: block; margin: 0; padding: 0; height: var(--hex-height,20px); min-height: 20px; width: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/20px var(--mono); letter-spacing: .05em; color: var(--accent); overscroll-behavior: contain; scrollbar-width: thin; }
 .core-view { position: relative; isolation: isolate; overflow: hidden; flex: 1 1 0; height: auto; min-height: 100px; max-height: none; }
 .core-view > #reactor, .core-view > .sample-field { position: absolute; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none; }
 .core-view > #reactor { z-index: 0; }
@@ -152,15 +156,17 @@ h1 { font-size: clamp(30px,3vw,44px); }
 #rate .leading-place { display: none; }
 .stats .unit, .stats .metric-unit { flex: 0 0 auto; width: auto; min-width: 0; margin: 0; text-align: left; font: 9px/1.2 var(--mono); }
 .core-bottom { flex: 0 0 29px; padding: 9px 15px; font-size: 9px; }
-.side-stack { grid-column: 3; grid-row: 1; display: grid; grid-template-columns: minmax(0,1fr); grid-template-rows: 318px minmax(0,1fr); min-height: 0; gap: 12px; }
+.side-stack { grid-column: 3; grid-row: 1; display: grid; grid-template-columns: minmax(0,1fr); grid-template-rows: auto minmax(196px,1fr); min-height: 0; gap: 12px; }
 .throughput-panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-.telemetry-body { flex: 1 1 auto; display: grid; grid-template-rows: auto 50px auto auto minmax(48px,1fr) auto; gap: 4px; min-height: 0; padding: 12px 14px; }
-#rate-chart { height: 50px; margin: 0; }
+.telemetry-body { flex: 0 0 auto; display: grid; grid-template-rows: 16px 48px auto auto auto; gap: 4px; min-height: 0; padding: 12px 14px; }
+#rate-chart { height: 48px; margin: 0; }
 .worker-heading { margin: 5px 0 0; padding-top: 7px; font-size: 10px; }
-#worker-lanes { display: grid; align-content: start; gap: 7px; min-height: 0; max-height: none; margin: 2px 0 0; overflow: auto; scrollbar-width: thin; scrollbar-gutter: stable; }
-.worker-lane { min-height: 13px; grid-template-columns: 2ch minmax(12px,1fr) 12ch; font-size: 10px; }
-.runtime-list { margin: 3px 0 0; font-size: 9px; }
-.runtime-list > div { padding: 4px 0; }
+#worker-lanes { --lane-rows: 1; display: grid; grid-template-columns: minmax(0,1fr); grid-template-rows: repeat(var(--lane-rows),16px); grid-auto-flow: column; align-content: start; gap: 1px 12px; height: auto; min-height: 0; max-height: none; margin: 2px 0 0; overflow: hidden; }
+#worker-lanes[data-columns="2"] { grid-template-columns: repeat(2,minmax(0,1fr)); }
+#worker-lanes[data-columns="2"] .worker-lane { grid-template-columns: 2ch minmax(10px,1fr); }
+#worker-lanes[data-columns="2"] .worker-lane output { display: none; }
+#worker-lanes[data-columns="2"] .worker-lane { cursor: help; }
+.worker-lane { min-height: 0; height: 100%; grid-template-columns: 2ch minmax(12px,1fr) 12ch; font-size: 10px; }
 .log-panel { min-height: 0; overflow: hidden; }
 .event-log { flex: 1 1 0; height: auto; min-height: 0; max-height: none; }
 .terminal-prompt { font-size: 10px; padding: 8px 12px; }
@@ -176,7 +182,7 @@ h1 { font-size: clamp(30px,3vw,44px); }
 /* Persistent, circle-contained result. There is never a blank transition frame. */
 .lock-banner { display: none; }
 body[data-state=found] .core-state { display: none; }
-body[data-state=found] .lock-banner { display: flex; position: absolute; visibility: visible; opacity: 1; inset: 45% auto auto 50%; transform: translate(-50%,-50%); width: var(--lock-width,220px); max-height: var(--lock-height,140px); padding: 12px 10px; gap: 5px; margin: 0; overflow: hidden; border: 1px solid var(--success); background: var(--panel); z-index: 1; align-items: center; flex-direction: column; text-align: center; pointer-events: none; }
+body[data-state=found] .lock-banner { display: flex; position: absolute; visibility: visible; opacity: 1; inset: 50% auto auto 50%; transform: translate(-50%,-50%); width: var(--lock-width,220px); max-height: var(--lock-height,140px); padding: 12px; gap: 5px; margin: 0; overflow: hidden; border: 1px solid var(--success); background: var(--panel); z-index: 1; align-items: center; flex-direction: column; text-align: center; pointer-events: none; }
 .lock-banner > span:first-child { font: 8px/1.2 var(--mono); letter-spacing: .10em; color: var(--muted); }
 .lock-banner b { color: var(--success); margin: 0; font: 500 var(--lock-font,22px)/1.2 var(--sans); white-space: nowrap; letter-spacing: .035em; }
 .locked-divisor { display: block; max-width: 100%; margin: 5px 0 0; font: 18px/1.25 var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; color: var(--ink); }
@@ -216,21 +222,28 @@ body[data-fx=full][data-state=found].hit-effect .lock-banner { animation: lock-a
   .stats { padding: 10px; }
   .stats dd { font-size: 20px; }
   .core-bottom { flex-basis: 26px; padding: 7px 12px; }
-  .side-stack { grid-template-rows: 240px minmax(0,1fr); gap: 9px; }
-  .telemetry-body { grid-template-rows: auto 43px auto auto minmax(48px,1fr); padding: 10px 12px; }
-  #rate-chart { height: 43px; }
-  .runtime-list { display: none; }
-  .output-label h2 { font-size: 13px; }
+  .side-stack { gap: 9px; grid-template-rows: auto minmax(188px,1fr); }
+  .telemetry-body { grid-template-rows: 16px 24px auto auto; gap: 2px; padding: 6px 12px; }
+  .throughput-panel .panel-heading, .log-panel .panel-heading { min-height: 28px; flex-basis: 28px; padding-top: 7px; padding-bottom: 7px; }
+  #rate-chart { height: 24px; }
+  .chart-axis { display: none; }
+  .worker-heading { padding-top: 0; margin-top: 2px; font-size: 9px; }
+  #worker-lanes { grid-template-rows: repeat(var(--lane-rows),12px); row-gap: 1px; margin: 0; }
+  .worker-lane { font-size: 9px; }
+  .terminal-prompt { padding-top: 6px; padding-bottom: 6px; }
+    .output-label h2 { font-size: 13px; }
 }
 @media (min-width:761px) and (max-width:1100px) {
   .workspace { grid-template-columns: 268px minmax(0,1fr); grid-template-rows: minmax(0,1fr) 108px 88px; }
   .core { grid-row: 1 / 3; }
   .side-stack { grid-column: 1; grid-row: 2; display: block; }
-  .side-stack .log-panel, .throughput-panel .panel-heading, .telemetry-label, #rate-chart, .chart-axis, .runtime-list { display: none; }
+  .side-stack .log-panel, .throughput-panel .panel-heading, .telemetry-label, #rate-chart, .chart-axis { display: none; }
   .throughput-panel { height: 100%; }
   .telemetry-body { display: flex; flex-direction: column; gap: 4px; height: 100%; padding: 8px 12px; }
   .worker-heading { margin: 0; padding: 0; border: 0; }
-  #worker-lanes { flex: 1; gap: 4px; }
+  #worker-lanes { flex: 1; grid-template-columns: repeat(2,minmax(0,1fr)); grid-template-rows: none; grid-auto-flow: row; grid-auto-rows: 12px; gap: 1px 8px; }
+  .worker-lane { grid-template-columns: 2ch minmax(8px,1fr); }
+  .worker-lane output { display: none; }
   .worker-lane { font-size: 9px; }
   .output { grid-row: 3; }
   .payload-body { overflow-y: auto; }
@@ -257,12 +270,11 @@ body[data-fx=full][data-state=found].hit-effect .lock-banner { animation: lock-a
   body[data-view=live] .workspace { display: flex; flex-direction: column; gap: 10px; }
   body[data-view=live] .payload, .side-stack { display: none; }
   .payload-body { min-height: 0; padding: 14px; overflow: visible; }
-  .target-dump { flex: 0 0 100px; }
-  .target-dump #target-stream { max-height: 76px; }
+  .target-dump { flex: 0 0 140px; }
   .payload-foot { display: flex; }
   body[data-view=live] .core { flex: 1 0 330px; min-height: 330px; }
   .core-view { min-height: 144px; }
-  .core-activity { display: flex; flex: 0 0 36px; height: 36px; min-height: 36px; max-height: 36px; overflow: hidden; flex-direction: column; justify-content: flex-end; padding: 2px 12px; border-top: 1px solid var(--fine); background: var(--panel); font: 9px/16px var(--mono); pointer-events: none; }
+  .core-activity { display: flex; flex: 0 0 36px; height: 36px; min-height: 36px; max-height: 36px; overflow: hidden; flex-direction: column; justify-content: flex-end; padding: 2px 12px; border-top: 0; background: var(--panel); font: 9px/16px var(--mono); pointer-events: none; }
   .core-activity .event { flex: 0 0 16px; height: 16px; min-height: 16px; padding: 0; animation: none; }
   .core-activity .trace-mark, .core-activity .event-message { font-size: 9px; line-height: 16px; }
   .core-activity .event:first-child { opacity: .65; }
@@ -291,7 +303,7 @@ body[data-fx=full][data-state=found].hit-effect .lock-banner { animation: lock-a
   .mobile-dock .primary { flex: 1; order: 0; }
   .mobile-dock .abort { flex: 0 0 70px; order: 1; }
   .mobile-dock .primary, .mobile-dock .abort { min-height: 46px; }
-  body[data-state=found] .lock-banner { padding: 9px 8px; gap: 3px; }
+  body[data-state=found] .lock-banner { padding: 9px 12px; gap: 3px; }
   .locked-divisor { font-size: 15px; }
   .locked-divisor.long { font-size: 9px; }
 }

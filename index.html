@@ -133,9 +133,15 @@
               <output id="candidate-count" aria-live="polite">—</output>
               <span class="candidate-note">UNIFORM DRAW · WITH REPLACEMENT</span>
             </div>
-              <section class="target-dump" aria-label="Input integer in hexadecimal">
-                <h3>TARGET / HEX</h3>
-                <pre id="target-stream" tabindex="0" aria-label="Hexadecimal digits of N">—</pre>
+              <section class="target-dump" aria-label="Input integer representation">
+                <div class="target-representation-heading">
+                  <h3 id="target-representation-label">TARGET / BITS</h3>
+                  <button id="target-representation-toggle" type="button" aria-controls="target-representation" aria-pressed="false">HEX</button>
+                </div>
+                <div id="target-representation" class="target-representation">
+                  <canvas id="target-bits" role="img" aria-label="Binary digits of N, most significant bit first"></canvas>
+                  <pre id="target-stream" tabindex="0" aria-label="Hexadecimal digits of N" hidden>—</pre>
+                </div>
               </section>
             </div>
           </div>
@@ -207,20 +213,6 @@
                 <span id="workers-active">—</span>
               </div>
               <div id="worker-lanes" aria-label="Per-worker throughput"></div>
-              <dl class="runtime-list">
-                <div>
-                  <dt>EXECUTION</dt>
-                  <dd id="engine-mode">LOADING</dd>
-                </div>
-                <div>
-                  <dt>ENTROPY</dt>
-                  <dd>ChaCha20</dd>
-                </div>
-                <div>
-                  <dt>SAMPLER</dt>
-                  <dd>WHEEL / 17</dd>
-                </div>
-              </dl>
             </div>
           </section>
           <section class="panel log-panel">
@@ -320,6 +312,7 @@
     <script defer src="js/event-stream.js"></script>
     <script defer src="js/sample-field.js"></script>
     <script defer src="js/panel-rims.js"></script>
+    <script defer src="js/target-bits.js"></script>
     <script defer src="js/visuals.js"></script>
     <script defer src="js/engine-data.js"></script>
     <script defer src="js/worker.js"></script>

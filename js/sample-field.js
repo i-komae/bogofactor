@@ -30,6 +30,7 @@ class SampleField {
     if (this.ctx) {
       this.ctx.save(); this.ctx.resetTransform();
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height); this.ctx.restore();
+      this.scanlines();
     }
   }
   project(divisor) {
@@ -118,7 +119,24 @@ class SampleField {
   }
   dot(p) {
     if (!this.ctx || !this.onPanel(p)) return false;
+    this.ctx.globalAlpha = .30 * this.edgeOpacity(p.y);
+    this.ctx.fillStyle = this.geometry.accent;
     this.ctx.fillRect(p.x - .5, p.y - .5, 1, 1); return true;
+  }
+  edgeOpacity(y) {
+    // The fade changes opacity only, never the mapping or the count of samples.
+    const t = Math.min(1, Math.max(0, Math.min(y, this.geometry.height - y) / 28));
+    return t * t * (3 - 2 * t);
+  }
+  scanlines() {
+    const g = this.geometry, ctx = this.ctx;
+    if (!g || !ctx) return;
+    ctx.save(); ctx.fillStyle = g.accent;
+    for (let y = 2; y < g.height; y += 4) {
+      ctx.globalAlpha = .025 * this.edgeOpacity(y);
+      ctx.fillRect(0, y, g.width, .5);
+    }
+    ctx.restore();
   }
   prepare(width, height, cx, cy, radius, palette, dpr) {
     if (width < 2 || height < 2) return;
@@ -138,9 +156,11 @@ class SampleField {
     const safe = Math.max(1, Math.min(inner - 12, cy - 8, height - cy - 8));
     view.style.setProperty('--lock-width', Math.min(360, safe * 1.6) + 'px');
     view.style.setProperty('--lock-height', Math.min(168, safe * 1.12) + 'px');
-    view.style.setProperty('--lock-font', Math.min(24, safe * .17) + 'px');
+    // Size the heading within the padded banner, including mobile narrow cases.
+    view.style.setProperty('--lock-font', Math.min(24, (Math.min(360, safe * 1.6) - 30) / 9.5) + 'px');
     const ctx = this.ctx; if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.scanlines();
     ctx.fillStyle = palette.accent; ctx.globalAlpha = .30;
     // All point centres already lie in-domain; the raster need not discard any.
     let drawable = 0;
@@ -157,7 +177,7 @@ class SampleField {
       for (const p of this.recent) {
         const age = Math.max(0, phase - p.phase); if (age >= 1.3) continue;
         const q = p.pixel; if (!q) continue;
-        ctx.globalAlpha = .42 * (1 - age / 1.3) ** 2;
+        ctx.globalAlpha = .42 * (1 - age / 1.3) ** 2 * this.edgeOpacity(q.y);
         ctx.beginPath(); ctx.arc(q.x, q.y, 2 + age * 3, 0, Math.PI * 2); ctx.stroke();
       }
       ctx.restore();
@@ -186,7 +206,7 @@ class SampleField {
       retainedCoordinates: this.size, recentHighlights: this.recent.length,
       rasterPixels: this.canvas.width * this.canvas.height,
       meanUpdateMs: this.updates ? this.totalMs / this.updates : 0,
-      geometry: this.geometry ? { ...this.geometry } : null,
+      geometry: this.geometry ? { ...this.geometry } : null, fadeWidth: 28,
       mapping: 'area-weighted angular CDF; r²=Rin²+(1-d/floor(sqrt(N)))*(rayLimit²-Rin²)',
       hit: this.hit ? this.pixel(this.hit) : null, link: this.link ? { ...this.link } : null };
   }
