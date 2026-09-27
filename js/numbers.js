@@ -59,7 +59,6 @@ const BogoNumbers = (() => {
     if (parent.tagName === 'DD') {
       const unit = parent.querySelector('.unit');
       if (unit && unit.textContent) width -= unit.getBoundingClientRect().width + 6;
-      if (['elapsed', 'rate'].includes(el.id) && el.clientWidth) width = Math.min(width, el.clientWidth);
     } else if (parent.classList.contains('worker-lane')) {
       // A grid item may span only its track, not the entire parent grid.
       width = el.clientWidth;

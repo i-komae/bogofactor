@@ -85,8 +85,7 @@
               <span id="input-digits">19 DIGITS</span>
             </div>
             <div class="input-frame">
-              <textarea id="n-input" rows="2" inputmode="numeric" spellcheck="false" autocomplete="off" autocapitalize="off" maxlength="10000" aria-describedby="error">1000000016000000063</textarea>
-              <span class="input-cross" aria-hidden="true">+</span>
+              <textarea id="n-input" rows="4" inputmode="numeric" spellcheck="false" autocomplete="off" autocapitalize="off" maxlength="10000" aria-describedby="error">1000000016000000063</textarea>
             </div>
             <div class="input-meta">
               <span>INTEGER / EXACT</span>
@@ -153,7 +152,6 @@
           </div>
           <div class="core-view" id="core-view">
             <canvas id="reactor" aria-hidden="true"></canvas>
-            <div class="core-activity" id="core-activity" aria-hidden="true"></div>
             <div class="core-state" aria-hidden="true">
               <strong id="core-word">STANDBY</strong>
               <span id="core-sub">AWAITING INPUT</span>
@@ -164,6 +162,7 @@
               <span id="locked-divisor" class="locked-divisor"></span>
             </div>
           </div>
+          <div class="core-activity" id="core-activity" aria-hidden="true"></div>
           <div class="trial-block">
             <div class="counter-heading">
               <h3>TRIALS EXECUTED</h3>
@@ -320,6 +319,7 @@
     <script defer src="js/audio.js"></script>
     <script defer src="js/event-stream.js"></script>
     <script defer src="js/sample-field.js"></script>
+    <script defer src="js/panel-rims.js"></script>
     <script defer src="js/visuals.js"></script>
     <script defer src="js/engine-data.js"></script>
     <script defer src="js/worker.js"></script>

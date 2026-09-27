@@ -21,7 +21,8 @@
     }
     const option = document.createElement('option');
     option.value = preset.id;
-    option.textContent = preset.label;
+    option.textContent = preset.id.startsWith('rsa') ? preset.label.split(' · ')[0] : preset.label;
+    option.title = preset.label;
     group.append(option);
   }
   const activeStates = ['screening', 'running', 'pausing', 'paused', 'resuming', 'stopping'];
@@ -155,7 +156,7 @@
     }
     $('mobile-main').disabled = $('start').disabled;
     $('mobile-main').hidden = !busy();
-    $('mobile-stop').hidden = !busy();
+    $('mobile-stop').hidden = false;
     $('mobile-stop').disabled = $('stop').disabled;
     $('mobile-new').hidden = busy();
   }
@@ -229,14 +230,8 @@
     const digits = input.value.normalize('NFKC').replace(/[\s,_]/g, '').length;
     input.classList.toggle('long', digits > 15);
     $('input-digits').textContent = /^\d+$/.test(input.value.normalize('NFKC').replace(/[\s,_]/g, '')) ? `${digits.toLocaleString('en-US')} DIGITS` : '';
-    // Content determines height, never the spare height of the panel. All
-    // three selectors below remain a single contiguous group.
-    const style = getComputedStyle(input);
-    const line = parseFloat(style.lineHeight) || 20;
-    const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-    input.style.setProperty('height', '0px', 'important');
-    input.style.setProperty('height', Math.ceil(Math.max(line * 2 + padding,
-      Math.min(line * 6 + padding, input.scrollHeight))) + 'px', 'important');
+    // The input is four complete lines in every state; overflow scrolls inside.
+
   }
   function editInput() {
     if (busy()) return;

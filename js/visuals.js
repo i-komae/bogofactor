@@ -198,6 +198,7 @@ const BogoVisual = (() => {
   const workerMeters = new WorkerMeters($('worker-lanes'));
   const activity = new EventStream($('event-log'));
   const sampleField = new SampleField(canvas);
+  const rims = new PanelRims(Array.from(document.querySelectorAll('.panel.core, .throughput-panel, .panel.payload, .panel.output')));
   // Equal angular rings give a stable wireframe, not fabricated factor candidates.
   for (let lat = 0; lat < 9; lat++) for (let lon = 0; lon < 20; lon++) {
     const a = (lat + 1) * Math.PI / 10, b = lon * Math.PI / 10, i = (lat * 20 + lon) * 3;
@@ -211,7 +212,7 @@ const BogoVisual = (() => {
   function log(tag, text, level = '') { activity.log(tag, text, level); }
   function colors() {
     const style = getComputedStyle(body), get = k => style.getPropertyValue(k).trim();
-    palette = { accent: get('--accent'), muted: get('--muted'), line: get('--line'), fine: get('--fine'), second: get('--secondary'), ink: get('--ink'), success: get('--success'), amber: get('--amber') };
+    palette = { accent: get('--accent'), bright: get('--bright'), muted: get('--muted'), line: get('--line'), fine: get('--fine'), second: get('--secondary'), ink: get('--ink'), success: get('--success'), amber: get('--amber') };
     draw();
   }
   function size() {
@@ -228,6 +229,7 @@ const BogoVisual = (() => {
   function draw() {
     if (!ctx || !palette.accent || width < 70 || height < 80) return;
     const t0 = performance.now(), tau = Math.PI * 2;
+    rims.draw(t0, state, wanted && !reduce.matches && visible && inView && state !== 'paused', palette);
     ctx.clearRect(0, 0, width, height); ctx.save();
     const cx = width / 2, cy = height * .45, R = Math.min(height * .385, width * .34);
     const active = state === 'running' || state === 'screening';
@@ -359,6 +361,7 @@ const BogoVisual = (() => {
     runningFrame = requestAnimationFrame(frame);
   }
   function syncMotion() {
+    rims.stop();
     if (!wanted || reduce.matches || !visible || state === 'paused') {
       RollingMetric.settleAll();
     }
@@ -369,7 +372,7 @@ const BogoVisual = (() => {
     $('fx-toggle').setAttribute('aria-pressed', String(wanted && !reduce.matches));
     $('fx-toggle').title = reduce.matches ? 'Reduced motion follows your system preference' : wanted ? 'Turn decorative motion off' : 'Turn decorative motion on';
     if (runningFrame) cancelAnimationFrame(runningFrame); runningFrame = 0;
-    if (motion() && ctx) { lastFrame = performance.now(); runningFrame = requestAnimationFrame(frame); }
+    if (motion() && ctx) { lastFrame = performance.now(); draw(); runningFrame = requestAnimationFrame(frame); }
     else draw();
   }
   const words = {
@@ -499,27 +502,11 @@ const BogoVisual = (() => {
   setTimeout(dismissIntro, 1500);
   document.addEventListener('pointerdown', dismissIntro, { once: true });
   document.addEventListener('keydown', dismissIntro, { once: true });
-  // The diagonal covers each rectangular mask at every angle. Update texture
-  // size only when layout changes, not during animation or counter updates.
-  const edgePanels = Array.from(document.querySelectorAll('.panel.core, .throughput-panel, .panel.payload, .panel.output'));
-  const sizeEdge = panel => {
-    const size = Math.ceil(Math.hypot(panel.clientWidth, panel.clientHeight)) + 4;
-    panel.lastElementChild.style.setProperty('--rim-size', size + 'px');
-  };
-  for (const panel of edgePanels) {
-    const edge = document.createElement('span'); edge.className = 'edge-light';
-    edge.setAttribute('aria-hidden', 'true'); panel.append(edge);
-    sizeEdge(panel);
-  }
-  if (window.ResizeObserver) {
-    const edgeObserver = new ResizeObserver(entries => { for (const entry of entries) sizeEdge(entry.target); });
-    for (const panel of edgePanels) edgeObserver.observe(panel);
-  } else addEventListener('resize', () => edgePanels.forEach(sizeEdge));
   colors(); size(); syncMotion(); log('BOOT', 'local engine initializing');
   return {
     state: change, snapshot: update, input, reset, toast,
     ready(kind) { $('core-engine').textContent = 'WASM / ' + kind.toUpperCase(); $('engine-mode').textContent = 'WASM / ' + kind.toUpperCase(); log('CORE', 'WASM/' + kind.toUpperCase() + ' ready'); log('RNG', 'ChaCha20 · local seed'); },
     error(text) { log('FAULT', text, 'warn'); },
-    get diagnostics() { return { state, frames, meanDrawMs: drawMs, active: !!runningFrame, fullMotion: wanted && !reduce.matches, visible, inView, sound: BogoAudio.diagnostics.wanted, sampleCount, logRows: $('event-log').children.length, canvasPixels: canvas.width * canvas.height, music: BogoAudio.diagnostics, scanGeometry: 'projected-spherical-latitude', sampleField: sampleField.diagnostics, workerMeters: workerMeters.diagnostics }; }
+    get diagnostics() { return { state, frames, meanDrawMs: drawMs, active: !!runningFrame, fullMotion: wanted && !reduce.matches, visible, inView, sound: BogoAudio.diagnostics.wanted, sampleCount, logRows: $('event-log').children.length, canvasPixels: canvas.width * canvas.height, music: BogoAudio.diagnostics, scanGeometry: 'projected-spherical-latitude', sampleField: sampleField.diagnostics, rims: rims.diagnostics, workerMeters: workerMeters.diagnostics }; }
   };
 })();
