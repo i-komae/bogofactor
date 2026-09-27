@@ -59,6 +59,7 @@ const BogoNumbers = (() => {
     if (parent.tagName === 'DD') {
       const unit = parent.querySelector('.unit');
       if (unit && unit.textContent) width -= unit.getBoundingClientRect().width + 6;
+      if (['elapsed', 'rate'].includes(el.id) && el.clientWidth) width = Math.min(width, el.clientWidth);
     } else if (parent.classList.contains('worker-lane')) {
       // A grid item may span only its track, not the entire parent grid.
       width = el.clientWidth;
@@ -231,6 +232,7 @@ class RollingMetric {
         const cell = this.columns[i], glyph = cell.firstChild, next = padded[i], old = oldPadded[i];
         // The same digit, decimal point and unit keep the same DOM nodes.
         if (glyph.textContent !== next) glyph.textContent = next;
+        cell.classList.toggle('leading-place', next === ' ');
         const canRoll = !quiet && !rebuild && this.direction && next !== old &&
           /^\d$/.test(next) && /^\d$/.test(old || '') && typeof cell.animate === 'function';
         if (canRoll) this.rotate(cell, Number(old), Number(next), this.direction);

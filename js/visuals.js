@@ -197,6 +197,7 @@ const BogoVisual = (() => {
   let lastTelemetry = -Infinity;
   const workerMeters = new WorkerMeters($('worker-lanes'));
   const activity = new EventStream($('event-log'));
+  const sampleField = new SampleField(canvas);
   // Equal angular rings give a stable wireframe, not fabricated factor candidates.
   for (let lat = 0; lat < 9; lat++) for (let lon = 0; lon < 20; lon++) {
     const a = (lat + 1) * Math.PI / 10, b = lon * Math.PI / 10, i = (lat * 20 + lon) * 3;
@@ -231,6 +232,8 @@ const BogoVisual = (() => {
     const cx = width / 2, cy = height * .45, R = Math.min(height * .385, width * .34);
     const active = state === 'running' || state === 'screening';
     const main = state === 'found' ? palette.success : state === 'paused' || state === 'screening' ? palette.amber : palette.accent;
+    sampleField.prepare(width, height, cx, cy, R, palette, dpr);
+    sampleField.drawHighlights(ctx, phase, state, palette, wanted && !reduce.matches);
     ctx.translate(cx, cy);
     // Long orthogonal registration axes anchor the rotating display.
     ctx.strokeStyle = palette.fine; ctx.lineWidth = .8; ctx.globalAlpha = .9; ctx.beginPath();
@@ -374,12 +377,19 @@ const BogoVisual = (() => {
     screening: ['ANALYZING', 'PRIMALITY SCREEN'], running: ['SAMPLING', 'DRAW / TEST / REPEAT'],
     pausing: ['HOLD', 'PAUSE REQUESTED'], paused: ['SUSPENDED', 'STATE PRESERVED'],
     resuming: ['RESTARTING', 'RESUMING SESSION'], stopping: ['HALTING', 'STOP REQUESTED'],
-    stopped: ['STOPPED', 'SESSION CLOSED'], found: ['RESOLVED', 'EXACT PRODUCT VERIFIED'],
+    stopped: ['STOPPED', 'SESSION CLOSED'], found: ['FACTOR LOCKED', 'EXACT PRODUCT VERIFIED'],
     prime: ['PRIME', 'NO NON-TRIVIAL FACTOR'], probable: ['PROBABLE', 'BPSW / NOT A PROOF'],
     capped: ['LIMIT', 'NO FACTOR FOUND'], error: ['FAULT', 'CHECK SYSTEM MESSAGE'],
     interrupted: ['INTERRUPTED', 'SESSION CLOSED'], 'counter-limit': ['LIMIT', 'COUNTER CAPACITY']
   };
   function change(next, previous, snapshot) {
+    if (next === 'found') {
+      const divisor = snapshot?.factor?.d || '';
+      const output = $('locked-divisor');
+      output.textContent = divisor.length > 22 && height < 150 ? divisor.slice(0, 10) + '…' + divisor.slice(-10) :
+        divisor.length > 60 ? divisor.slice(0, 28) + '…' + divisor.slice(-28) : divisor;
+      output.classList.toggle('long', divisor.length > 24);
+    }
     state = next; body.dataset.state = next;
     const w = words[next] || [next.toUpperCase(), '']; $('core-word').textContent = w[0]; $('core-sub').textContent = w[1];
     $('counter-tag').textContent = next === 'running' ? 'LIVE / EXACT' : 'EXACT COUNT';
@@ -410,12 +420,6 @@ const BogoVisual = (() => {
     if (next === 'running' && previous !== 'running') {
       body.classList.add('start-effect'); startTimer = setTimeout(() => body.classList.remove('start-effect'), 1000);
     } else if (next === 'found') {
-      const divisor = snapshot?.factor?.d || '';
-      const output = $('locked-divisor');
-      // Show only actual result digits, never random stand-ins. Long results
-      // remain complete in the result panel and share card below.
-      output.textContent = divisor.length > 60 ? divisor.slice(0, 28) + '…' + divisor.slice(-28) : divisor;
-      output.classList.toggle('long', divisor.length > 24);
       clearTimeout(hitTimer); body.classList.add('hit-effect'); hitTimer = setTimeout(() => body.classList.remove('hit-effect'), 2700);
     }
     syncMotion();
@@ -441,6 +445,7 @@ const BogoVisual = (() => {
   }
   function update(snapshot) {
     lastSnapshot = snapshot;
+    sampleField.observe(snapshot, phase);
     workerMeters.update(snapshot);
     if (snapshot.elapsedMs - lastTelemetry >= 500 || snapshot.status !== 'running') {
       if (snapshot.status === 'running' && state !== 'pausing' && state !== 'stopping') chart(snapshot.rate);
@@ -451,12 +456,14 @@ const BogoVisual = (() => {
   function input(n) {
     if (n === lastInput) return;
     lastInput = n; target = n;
+    sampleField.setTarget(n);
     let hex = '';
     try { hex = n ? BigInt(n).toString(16).toUpperCase() : ''; } catch (_) {}
-    const text = hex ? hex.slice(0, 256).match(/.{1,4}/g).join(' ') : 'AWAITING VALID INTEGER';
-    $('target-stream').textContent = Array(5).fill(text).join('  //  ');
+    // This is N itself, not a repeated decorative stream or invented addresses.
+    $('target-stream').textContent = hex ? hex.match(/.{1,4}/g).join(' ') : '—';
   }
   function reset() {
+    sampleField.clear();
     lastTelemetry = -Infinity; samples.fill(0); sampleHead = 0; sampleCount = 0; activity.reset(); lastSnapshot = null; workerMeters.update({ workers: [] });
     $('rate-path').setAttribute('d', 'M0 70H260'); $('rate-area').setAttribute('d', 'M0 76H260Z'); peakDisplay?.reset();
     $('rate-chart').setAttribute('aria-label', 'Measured throughput history; no data yet');
@@ -513,6 +520,6 @@ const BogoVisual = (() => {
     state: change, snapshot: update, input, reset, toast,
     ready(kind) { $('core-engine').textContent = 'WASM / ' + kind.toUpperCase(); $('engine-mode').textContent = 'WASM / ' + kind.toUpperCase(); log('CORE', 'WASM/' + kind.toUpperCase() + ' ready'); log('RNG', 'ChaCha20 · local seed'); },
     error(text) { log('FAULT', text, 'warn'); },
-    get diagnostics() { return { state, frames, meanDrawMs: drawMs, active: !!runningFrame, fullMotion: wanted && !reduce.matches, visible, inView, sound: BogoAudio.diagnostics.wanted, sampleCount, logRows: $('event-log').children.length, canvasPixels: canvas.width * canvas.height, music: BogoAudio.diagnostics, scanGeometry: 'projected-spherical-latitude', workerMeters: workerMeters.diagnostics }; }
+    get diagnostics() { return { state, frames, meanDrawMs: drawMs, active: !!runningFrame, fullMotion: wanted && !reduce.matches, visible, inView, sound: BogoAudio.diagnostics.wanted, sampleCount, logRows: $('event-log').children.length, canvasPixels: canvas.width * canvas.height, music: BogoAudio.diagnostics, scanGeometry: 'projected-spherical-latitude', sampleField: sampleField.diagnostics, workerMeters: workerMeters.diagnostics }; }
   };
 })();

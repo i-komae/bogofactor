@@ -81,16 +81,9 @@
           </div>
           <div class="payload-body">
             <div class="field-heading">
-              <label for="preset">LOAD TARGET</label>
+              <label for="n-input">INTEGER N</label>
               <span id="input-digits">19 DIGITS</span>
             </div>
-            <div class="select-wrap">
-              <select id="preset" aria-label="Select an input example">
-                <option value="">Custom integer</option>
-              </select>
-              <span aria-hidden="true">⌄</span>
-            </div>
-            <label class="sr-only" for="n-input">Integer N to factor</label>
             <div class="input-frame">
               <textarea id="n-input" rows="2" inputmode="numeric" spellcheck="false" autocomplete="off" autocapitalize="off" maxlength="10000" aria-describedby="error">1000000016000000063</textarea>
               <span class="input-cross" aria-hidden="true">+</span>
@@ -99,11 +92,16 @@
               <span>INTEGER / EXACT</span>
               <span id="input-bits">60 BITS</span>
             </div>
-            <div class="candidate-block">
-              <span class="eyebrow">ELIGIBLE CANDIDATES</span>
-              <output id="candidate-count" aria-live="polite">—</output>
-              <span class="candidate-note">UNIFORM DRAW · WITH REPLACEMENT</span>
-            </div>
+            <div class="search-controls">
+              <div class="preset-setting">
+                <label for="preset">LOAD TARGET</label>
+                <div class="select-wrap">
+                  <select id="preset" aria-label="Select an input example">
+                    <option value="">Custom integer</option>
+                  </select>
+                  <span aria-hidden="true">⌄</span>
+                </div>
+              </div>
             <div class="limit-row">
               <label for="cap">TRIAL LIMIT</label>
               <div class="select-wrap">
@@ -129,6 +127,18 @@
             </div>
             <p class="key-hint"><span>⌘ / CTRL + ENTER</span><span>RUN / PAUSE</span></p>
             <p id="error" class="error" role="alert" hidden=""></p>
+            </div>
+            <div class="target-data">
+            <div class="candidate-block">
+              <span class="eyebrow">ELIGIBLE CANDIDATES</span>
+              <output id="candidate-count" aria-live="polite">—</output>
+              <span class="candidate-note">UNIFORM DRAW · WITH REPLACEMENT</span>
+            </div>
+              <section class="target-dump" aria-label="Input integer in hexadecimal">
+                <h3>TARGET / HEX</h3>
+                <pre id="target-stream" tabindex="0" aria-label="Hexadecimal digits of N">—</pre>
+              </section>
+            </div>
           </div>
           <div class="payload-foot">
             <span class="mini-cross" aria-hidden="true">+</span>
@@ -252,13 +262,6 @@
         <button id="mobile-stop" class="abort" type="button">ABORT</button>
         <button id="mobile-new" class="primary" type="button" hidden="">NEW TARGET <span aria-hidden="true">↗</span></button>
       </div>
-      <div class="data-rail" aria-hidden="true">
-        <span>TARGET / HEX</span>
-        <div class="data-rail-window">
-          <span id="target-stream">28A3</span>
-        </div>
-        <b>END</b>
-      </div>
       <noscript>
         <p class="error">Enable JavaScript to use this application.</p>
       </noscript>
@@ -316,6 +319,7 @@
     <script defer src="js/numbers.js"></script>
     <script defer src="js/audio.js"></script>
     <script defer src="js/event-stream.js"></script>
+    <script defer src="js/sample-field.js"></script>
     <script defer src="js/visuals.js"></script>
     <script defer src="js/engine-data.js"></script>
     <script defer src="js/worker.js"></script>

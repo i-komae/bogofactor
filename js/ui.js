@@ -138,8 +138,8 @@
     $('start-label').textContent = fatal ? 'RETRY ENGINE' : running || status === 'pausing' ? 'PAUSE SEARCH' :
       paused || status === 'resuming' ? 'RESUME SEARCH' : status === 'boot' ? 'INITIALIZING' : 'INITIATE SEARCH';
     $('start').disabled = unavailable || (!initialized && !fatal) || pendingStates.includes(status);
-    $('stop').hidden = !busy();
-    $('stop').disabled = status === 'stopping';
+    $('stop').hidden = false;
+    $('stop').disabled = !busy() || status === 'stopping';
     $('n-input').readOnly = busy();
     $('cap').disabled = busy();
     $('preset').disabled = busy();
@@ -229,7 +229,14 @@
     const digits = input.value.normalize('NFKC').replace(/[\s,_]/g, '').length;
     input.classList.toggle('long', digits > 15);
     $('input-digits').textContent = /^\d+$/.test(input.value.normalize('NFKC').replace(/[\s,_]/g, '')) ? `${digits.toLocaleString('en-US')} DIGITS` : '';
-    input.style.height = '';
+    // Content determines height, never the spare height of the panel. All
+    // three selectors below remain a single contiguous group.
+    const style = getComputedStyle(input);
+    const line = parseFloat(style.lineHeight) || 20;
+    const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    input.style.setProperty('height', '0px', 'important');
+    input.style.setProperty('height', Math.ceil(Math.max(line * 2 + padding,
+      Math.min(line * 6 + padding, input.scrollHeight))) + 'px', 'important');
   }
   function editInput() {
     if (busy()) return;
