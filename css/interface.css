@@ -109,10 +109,10 @@ body[data-fx=quiet] .event.trace-line { animation: none !important; }
 .stats { padding: 14px 10px; }
 .stats > div, .stats > div + div { padding: 0 12px; border-left: 1px solid var(--line); }
 .stats dt { text-align: left; }
-.stats dd { display: grid; grid-template-columns: minmax(0, min(7.5ch, calc(100% - 4ch))) max-content; justify-content: start; text-align: left; }
-#elapsed { margin-left: 0; }
-#rate { min-width: 0; width: 100%; text-align: left; }
-#rate .metric-value { justify-content: flex-start; }
+.stats dd { display: grid; grid-template-columns: minmax(0, min(7.5ch, calc(100% - 4ch))) max-content; justify-content: start; text-align: right; column-gap: 6px; }
+#elapsed { margin-left: 0; text-align: right; }
+#rate { min-width: 0; width: 100%; text-align: right; }
+#rate .metric-value { justify-content: flex-end; }
 #rate .leading-place { display: none; }
 /* Buttons describe their next action consistently on desktop and mobile. */
 .primary .action-icon {
@@ -188,10 +188,10 @@ body[data-fx=full][data-state=found].hit-effect .lock-banner { animation: lock-a
 .search-controls .worker-setting label span { display: block; font-size: 8px; }
 .search-controls .actions { margin: 12px 0 0; }
 .search-controls .key-hint { margin: 8px 0 0; }
-.target-data { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; margin-top: 18px; }
+.target-data { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; justify-content: flex-end; padding-top: 18px; margin-top: auto; }
 .target-data .candidate-block { flex: 0 0 auto; margin: 0; padding: 12px 0; border-top: 1px solid var(--fine); }
 .target-data .candidate-block output { font-size: 24px; line-height: 1.4; }
-.target-dump { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 40px; border-top: 1px solid var(--fine); padding-top: 10px; }
+.target-dump { flex: 0 1 auto; display: flex; flex-direction: column; min-height: 40px; border-top: 1px solid var(--fine); padding-top: 10px; }
 .target-dump h3 { flex: 0 0 auto; margin: 0 0 6px; font: 9px/1.4 var(--mono); letter-spacing: .10em; color: var(--muted); }
 .target-dump #target-stream { flex: 1 1 auto; display: block; margin: 0; padding: 0 0 6px; min-height: 0;
   width: auto; height: auto; max-width: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
@@ -215,7 +215,7 @@ body[data-fx=full][data-state=found].hit-effect .lock-banner { animation: lock-a
   .payload-body { padding: 10px 14px; }
   .search-controls { margin-top: 12px; }
   .search-controls .preset-setting, .search-controls .limit-row, .search-controls .worker-setting { margin-bottom: 6px; }
-  .target-data { margin-top: 12px; }
+  .target-data { padding-top: 12px; margin-top: auto; }
   .target-data .candidate-block { padding: 9px 0; }
   .target-data .candidate-block output { font-size: 22px; }
   .stats { padding: 11px 10px; }
@@ -238,7 +238,8 @@ body[data-fx=full][data-state=found].hit-effect .lock-banner { animation: lock-a
 }
 
 /* A retained raster of real sampled tests stays behind the transparent reactor. */
-.core-view > .sample-field { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.core-view > .sample-field { opacity: .65; position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+body[data-state=running] .sample-field, body[data-state=found] .sample-field { opacity: 1; }
 .core-view > #reactor { position: relative; z-index: 0; }
 
 /* Reserve the action geometry too; ABORT is disabled rather than removed. */

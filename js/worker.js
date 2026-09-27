@@ -38,20 +38,29 @@ const BogoWorker = (() => {
       }
       postMessage({ type: 'snapshot', id: j.id, seq, status, trials: String(t), elapsedMs: ms,
         rate: status === 'running' ? j.rates.value(t, ms) : null, factor,
-        sample: j.samplePending ? j.sample : null, memoryBytes: engine.memory.buffer.byteLength });
+        sample: j.samplePending ? j.sample : null, fieldSamples: j.fieldSamples, memoryBytes: engine.memory.buffer.byteLength });
       j.samplePending = false;
+      j.fieldSamples = [];
     }
-    function captureSample(j) {
+    function captureSample(j, forLog = true, forField = false) {
       const trial = count();
       const found = engine.get_found();
       const d = BOGO.read(engine, engine.ptr_divisor(), found || j.divisorWords.length);
       if (d < 2n || d > j.root) throw Error('Sampled divisor is outside the search range.');
       // The completed engine verdict is enough for the visual trace. Never
       // repeat big-integer division solely to produce decorative output.
-      j.sample = { trial: String(trial), divisor: String(d), hit: !!found,
-        fromTrial: String(j.lastSampleTrial + 1n), tested: String(trial - j.lastSampleTrial) };
-      j.lastSampleTrial = trial;
-      j.samplePending = true;
+      const record = { trial: String(trial), divisor: String(d), hit: !!found };
+      if (forLog) {
+        j.sample = { ...record, fromTrial: String(j.lastSampleTrial + 1n),
+          tested: String(trial - j.lastSampleTrial) };
+        j.lastSampleTrial = trial;
+        j.samplePending = true;
+      }
+      if (forField) {
+        j.fieldSamples.push(record);
+        // Bounded even if the UI has stopped acknowledging reports.
+        if (j.fieldSamples.length > 20) j.fieldSamples.splice(0, j.fieldSamples.length - 20);
+      }
     }
     function finish(j, status) { freeze(j); j.paused = true; j.done = true; report(j, status); }
     function tick() {
@@ -62,21 +71,27 @@ const BogoWorker = (() => {
         if (rem <= 0n) { finish(j, 'capped'); return; }
         const budget = Number(rem < BigInt(j.budget) ? rem : BigInt(j.budget));
         const start = performance.now(), sampleDue = start >= j.nextSample;
-        if (sampleDue) {
-          // The export stores only the last candidate, not its length. Clear
-          // unused high words before ONE normal test so its value is unambiguous
-          // even when a small candidate follows a large one. Candidate order,
-          // distribution, first-hit stopping and the quota are unchanged.
-          if (budget > 1) engine.run(budget - 1);
-          if (!engine.get_found()) {
+        const fieldDue = start >= j.nextField;
+        if (sampleDue || fieldDue) {
+          // Reserve up to five of this batch's NORMAL trials for observation.
+          // No extra draws: total work is still exactly budget (or the first hit).
+          const observed = Math.min(budget, fieldDue ? 5 : 1);
+          if (budget > observed) engine.run(budget - observed);
+          if (engine.get_found()) captureSample(j, true, true);
+          else for (let i = 0; i < observed; i++) {
+            // Clear unused high words before each observed normal test.
             j.divisorWords.fill(0);
             engine.run(1);
+            const hit = !!engine.get_found();
+            captureSample(j, hit || (sampleDue && i === observed - 1), fieldDue || hit);
+            if (hit) break;
           }
-          captureSample(j);
-          j.nextSample = performance.now() + j.sampleInterval;
+          if (sampleDue) j.nextSample = performance.now() + j.sampleInterval;
+          // Skip missed display slots, rather than running a catch-up burst.
+          if (fieldDue) j.nextField += (Math.floor((performance.now() - j.nextField) / j.fieldInterval) + 1) * j.fieldInterval;
         } else {
           engine.run(budget);
-          if (engine.get_found()) captureSample(j);
+          if (engine.get_found()) captureSample(j, true, true);
         }
         const dt = performance.now() - start;
         if (engine.get_found()) { finish(j, 'found'); return; }
@@ -111,7 +126,9 @@ const BogoWorker = (() => {
             divisorWords: new Uint32Array(engine.memory.buffer, engine.ptr_divisor(), Math.ceil(config.root.toString(2).length / 32)),
             sampleInterval: Math.max(60, Math.min(2000, Number(m.sampleInterval) || 60)),
             nextSample: 0, sampleOffset: Math.max(0, Number(m.sampleOffset) || 0),
-            sample: null, samplePending: false, lastSampleTrial: 0n };
+            sample: null, samplePending: false, lastSampleTrial: 0n,
+            fieldInterval: Math.max(50, Math.min(1600, Number(m.fieldInterval) || 50)),
+            fieldOffset: Math.max(0, Number(m.fieldOffset) || 0), nextField: 0, fieldSamples: [] };
           job.rates.reset(0n, 0);
           postMessage({ type: 'prepared', id: m.id, candidateCount: String(config.count), engineKind });
           return;
@@ -122,6 +139,7 @@ const BogoWorker = (() => {
           if (j.done || !j.paused) return;
           j.paused = false; j.started = performance.now(); j.rates.reset(count(), elapsed(j)); j.rateAt = elapsed(j);
           j.nextSample = performance.now() + j.sampleOffset;
+          j.nextField = performance.now() + j.fieldOffset;
           j.outstanding = null; j.lastReport = performance.now(); report(j, 'running'); schedule();
         } else if (m.cmd === 'pause') {
           if (!j.done) { freeze(j); j.paused = true; }

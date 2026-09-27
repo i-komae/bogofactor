@@ -383,6 +383,7 @@ const BogoVisual = (() => {
     interrupted: ['INTERRUPTED', 'SESSION CLOSED'], 'counter-limit': ['LIMIT', 'COUNTER CAPACITY']
   };
   function change(next, previous, snapshot) {
+    if (next === 'screening') sampleField.begin(lastInput || target);
     if (next === 'found') {
       const divisor = snapshot?.factor?.d || '';
       const output = $('locked-divisor');
@@ -456,14 +457,13 @@ const BogoVisual = (() => {
   function input(n) {
     if (n === lastInput) return;
     lastInput = n; target = n;
-    sampleField.setTarget(n);
     let hex = '';
     try { hex = n ? BigInt(n).toString(16).toUpperCase() : ''; } catch (_) {}
     // This is N itself, not a repeated decorative stream or invented addresses.
     $('target-stream').textContent = hex ? hex.match(/.{1,4}/g).join(' ') : '—';
   }
   function reset() {
-    sampleField.clear();
+    // Retain the previous search raster while editing; begin() clears it.
     lastTelemetry = -Infinity; samples.fill(0); sampleHead = 0; sampleCount = 0; activity.reset(); lastSnapshot = null; workerMeters.update({ workers: [] });
     $('rate-path').setAttribute('d', 'M0 70H260'); $('rate-area').setAttribute('d', 'M0 76H260Z'); peakDisplay?.reset();
     $('rate-chart').setAttribute('aria-label', 'Measured throughput history; no data yet');
