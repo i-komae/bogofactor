@@ -2,7 +2,7 @@
 
 https://i-komae.github.io/bogofactor/
 
-The best integer factorization algorithm in the world. Give it a composite N and it finds a non-trivial factor in O(1).\*
+The best integer factorization algorithm in the world. Give it a composite N and it may find a non-trivial factor in O(1).\*
 
 \* Best case.
 
