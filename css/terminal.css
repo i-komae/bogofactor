@@ -1384,6 +1384,14 @@ dialog summary {
   margin-top: 17px;
 }
 
+.boot-note {
+  font: 8px var(--mono);
+  letter-spacing: .3em;
+  color: var(--muted);
+  opacity: .75;
+  margin-top: 8px;
+}
+
 .boot-line {
   width: 220px;
   height: 1px;
