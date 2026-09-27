@@ -207,25 +207,13 @@ class CoreBackdrop {
       }
     }
     g.translate(cx, cy);
-    // One shared centre, with deliberately broken arcs rather than a collection
-    // of unrelated ellipses. Everything scales with the existing reactor ring.
-    g.strokeStyle = palette.line; g.globalAlpha = .7; g.lineWidth = .7;
-    g.beginPath(); g.arc(0, 0, radius * 1.20, 0, tau); g.stroke();
-    g.strokeStyle = palette.accent; g.globalAlpha = .20;
+    // A single quiet outer reference. The foreground already supplies the
+    // moving reticle and scale; do not stack a second dense dial over it.
+    g.strokeStyle = palette.line; g.globalAlpha = .36; g.lineWidth = .65;
     g.beginPath();
-    for (let i = 0; i < 120; i++) {
-      const a = i * tau / 120;
-      const inner = radius * 1.24, outer = inner + (i % 10 === 0 ? 7 : i % 5 === 0 ? 4 : 2);
-      g.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
-      g.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
-    }
-    g.stroke();
-    const sections = [[-.64, -.18, 1.15], [.30, 1.02, 1.15], [1.35, 2.17, 1.13], [2.61, 3.55, 1.15], [4.0, 4.58, 1.13]];
-    g.strokeStyle = palette.second; g.globalAlpha = .22; g.lineWidth = 2;
-    g.beginPath();
-    for (const [a, b, r] of sections) {
-      g.moveTo(Math.cos(a) * radius * r, Math.sin(a) * radius * r);
-      g.arc(0, 0, radius * r, a, b);
+    for (const [a, b] of [[-.78, .12], [1.55, 2.52], [3.70, 4.20]]) {
+      g.moveTo(Math.cos(a) * radius * 1.20, Math.sin(a) * radius * 1.20);
+      g.arc(0, 0, radius * 1.20, a, b);
     }
     g.stroke();
     // A pair of angular brackets establishes a frame, not additional gauges.
@@ -250,7 +238,7 @@ class CoreBackdrop {
       const angle = phase * .22 - Math.PI / 2;
       for (let layer = 0; layer < 3; layer++) {
         ctx.strokeStyle = color;
-        ctx.globalAlpha = (active ? .54 : .16) * [.12, .30, .85][layer];
+        ctx.globalAlpha = (active ? .32 : .12) * [.12, .30, .85][layer];
         ctx.lineWidth = [6, 2.6, 1][layer];
         ctx.beginPath(); ctx.arc(0, 0, radius * 1.20, angle - .35, angle + .06); ctx.stroke();
       }
@@ -346,7 +334,7 @@ const BogoVisual = (() => {
     }
     ctx.stroke(); ctx.restore();
     const s = Math.sin(phase * .23), c = Math.cos(phase * .23), tilt = .32;
-    const size = R * .68;
+    const size = R * .80;
     for (let i = 0; i < points.length; i += 3) {
       const x = points[i] * c - points[i + 2] * s, z = points[i] * s + points[i + 2] * c;
       const y = points[i + 1] * Math.cos(tilt) - z * Math.sin(tilt), zz = points[i + 1] * Math.sin(tilt) + z * Math.cos(tilt);
