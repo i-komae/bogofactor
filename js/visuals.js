@@ -19,6 +19,11 @@ class WorkerMeters {
     this.pulseSpeed = 68; // CSS pixels/second; identical across workers, no random phase.
     this.observer = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this.measure()) : null;
     this.observer?.observe(root);
+    this.side = root.closest('.side-stack');
+    this.sideObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this.layout()) : null;
+    if (this.side) this.sideObserver?.observe(this.side);
+    this.heightQuery = matchMedia('(max-height:790px)');
+    this.heightQuery.addEventListener('change', () => this.layout());
     if (typeof IntersectionObserver === 'function') {
       this.intersection = new IntersectionObserver(entries => {
         this.inView = entries[0].isIntersecting;
@@ -59,12 +64,41 @@ class WorkerMeters {
     else this.previousTime = 0;
   }
   measure() {
+    this.layout();
     for (const lane of this.lanes) {
       lane.width = lane.track.clientWidth;
       this.paint(lane);
       lane.metric.resize();
     }
     this.schedule();
+  }
+  layout() {
+    if (!this.side || !this.lanes.length || !this.side.clientHeight) return;
+    const count = this.lanes.length;
+    const key = [count, this.side.clientWidth, this.side.clientHeight, innerHeight].join('|');
+    if (key === this.layoutKey) return;
+    this.layoutKey = key;
+    this.side.dataset.dense = 'false';
+    const styles = el => getComputedStyle(el), px = value => parseFloat(value) || 0;
+    const outer = el => el.getBoundingClientRect().height + px(styles(el).marginTop) + px(styles(el).marginBottom);
+    const body = this.side.querySelector('.telemetry-body'), bs = styles(body);
+    const log = this.side.querySelector('.log-panel'), ls = styles(log.querySelector('.event-log'));
+    const row = this.heightQuery.matches ? 15 : 18, gap = this.heightQuery.matches ? 1 : 2;
+    const chrome = outer(this.side.querySelector('.throughput-panel .panel-heading')) + 2 +
+      px(bs.paddingTop) + px(bs.paddingBottom) + 4 * px(bs.rowGap) +
+      [...body.children].filter(el => el !== this.root).reduce((n, el) => n + outer(el), 0) +
+      px(styles(this.root).marginTop) + px(styles(this.root).marginBottom);
+    const minimumLog = outer(log.querySelector('.panel-heading')) + outer(log.querySelector('.terminal-prompt')) +
+      px(ls.paddingTop) + px(ls.paddingBottom) + 6 * 18 + 2;
+    const panelGap = px(styles(this.side).rowGap);
+    const fits = rows => chrome + rows * (row + gap) - gap + panelGap + minimumLog <= this.side.clientHeight;
+    const columns = count > 16 || !fits(count) ? 2 : 1;
+    const rows = Math.ceil(count / columns);
+    // At the densest selections only, surrender decorative prompt/padding,
+    // never a worker, its value, the chart, six log lines, or animation frames.
+    this.side.dataset.dense = String(!fits(rows));
+    this.root.dataset.columns = String(columns);
+    this.root.style.setProperty('--lane-rows', String(rows));
   }
   setMotion(enabled, visible) {
     this.enabled = enabled; this.visible = visible;
@@ -83,8 +117,6 @@ class WorkerMeters {
     this.stopFrame();
     for (const lane of this.lanes) lane.metric.dispose();
     this.root.replaceChildren(); this.lanes = [];
-    this.root.dataset.columns = count > 16 ? '2' : '1';
-    this.root.style.setProperty('--lane-rows', String(count > 16 ? Math.ceil(count / 2) : count));
     this.root.setAttribute('aria-label', count + ' worker slots; current throughput relative to the fastest active worker');
     for (let i = 0; i < count; i++) {
       const row = document.createElement('div'); row.className = 'worker-lane';
@@ -212,7 +244,11 @@ const BogoVisual = (() => {
   const workerMeters = new WorkerMeters($('worker-lanes'));
   const activity = new EventStream($('event-log'));
   const sampleField = new SampleField(canvas);
-  const targetBits = new TargetBits($('target-bits'), $('target-stream'));
+  const scale = document.createElement('canvas');
+  scale.className = 'reactor-scale'; scale.setAttribute('aria-hidden', 'true');
+  canvas.before(scale);
+  const scaleContext = scale.getContext('2d');
+  let scaleKey = '';
   const rims = new PanelRims(Array.from(document.querySelectorAll('.panel.core, .throughput-panel, .panel.payload, .panel.output')));
   // Equal angular rings give a stable wireframe, not fabricated factor candidates.
   for (let lat = 0; lat < 9; lat++) for (let lon = 0; lon < 20; lon++) {
@@ -241,33 +277,60 @@ const BogoVisual = (() => {
     ctx.globalAlpha = opacity; ctx.strokeStyle = stroke; ctx.lineWidth = weight;
     ctx.beginPath(); ctx.arc(0, 0, radius, start, end); ctx.stroke();
   }
+  function prepareScale(cx, cy, R, main) {
+    const key = [width, height, dpr, main, palette.fine, palette.line].join('|');
+    if (key === scaleKey || !scaleContext) return;
+    scaleKey = key; scale.width = Math.ceil(width * dpr); scale.height = Math.ceil(height * dpr);
+    const g = scaleContext, tau = Math.PI * 2;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.translate(cx, cy);
+    g.strokeStyle = palette.fine; g.lineWidth = .8; g.globalAlpha = .9;
+    g.beginPath(); g.moveTo(-cx + 17, 0); g.lineTo(cx - 17, 0); g.stroke();
+    const fade = g.createLinearGradient(0, -cy, 0, height - cy);
+    const fadeScale = Math.min(1, height / 120);
+    fade.addColorStop(0, 'transparent'); fade.addColorStop(40 * fadeScale / height, palette.fine);
+    fade.addColorStop(1 - 80 * fadeScale / height, palette.fine); fade.addColorStop(1, 'transparent');
+    g.strokeStyle = fade; g.beginPath(); g.moveTo(0, -cy); g.lineTo(0, height - cy); g.stroke();
+    g.strokeStyle = palette.fine; g.beginPath();
+    for (const x of [-1,1]) for (const y of [-1,1]) {
+      const px=x*(R+22), py=y*(R-13);
+      g.moveTo(px-4,py); g.lineTo(px+4,py); g.moveTo(px,py-4); g.lineTo(px,py+4);
+    }
+    g.stroke(); g.strokeStyle=palette.line; g.globalAlpha=.8;
+    g.beginPath(); g.arc(0,0,R+8,0,tau); g.stroke();
+    g.strokeStyle=main; g.globalAlpha=.5; g.beginPath();
+    for (let i=0;i<90;i++) {
+      const a=i*tau/90,l=i%5?3:8;
+      g.moveTo((R+7)*Math.cos(a),(R+7)*Math.sin(a));
+      g.lineTo((R+7+l)*Math.cos(a),(R+7+l)*Math.sin(a));
+    }
+    g.stroke(); g.globalAlpha=.72; g.lineWidth=1; g.beginPath();
+    for(let i=0;i<4;i++) {
+      const a=i*Math.PI/2,x=Math.cos(a)*(R+22),y=Math.sin(a)*(R+22);
+      g.moveTo(x-Math.sin(a)*4,y+Math.cos(a)*4);g.lineTo(x,y);g.lineTo(x+Math.sin(a)*4,y-Math.cos(a)*4);
+    }
+    g.stroke();
+    if(width>510) {
+      g.globalAlpha=.35;g.strokeStyle=palette.line;g.lineWidth=.8;g.beginPath();
+      g.moveTo(-R-40,R*.54);g.lineTo(-R-24,R*.54);g.lineTo(-R-16,R*.66);
+      g.moveTo(R+20,-R*.57);g.lineTo(R+32,-R*.71);g.lineTo(R+48,-R*.71);g.stroke();
+    }
+  }
   function draw() {
     if (!ctx || !palette.accent || width < 70 || height < 80) return;
     const t0 = performance.now(), tau = Math.PI * 2;
     rims.draw(t0, state, wanted && !reduce.matches && visible && inView && state !== 'paused', palette);
     ctx.clearRect(0, 0, width, height); ctx.save();
     // One shared geometric centre for the full dot rectangle, globe and banner.
-    // Reserve at least 24px outside the outer (R + 20px) tick/worker ring.
+    // Keep the scene centred; compact phones use the approved 18px reserve.
     const cx = width / 2, cy = height / 2;
-    const R = Math.max(22, Math.min(width * .34, width / 2 - 44, height / 2 - 44));
+    const reserve = width <= 400 ? 18 : 44;
+    const R = Math.max(22, Math.min(width * .34, width / 2 - reserve, height / 2 - reserve));
     const active = state === 'running' || state === 'screening';
     const main = state === 'found' ? palette.success : state === 'paused' || state === 'screening' ? palette.amber : palette.accent;
     sampleField.prepare(width, height, cx, cy, R, palette, dpr);
+    prepareScale(cx, cy, R, main);
     sampleField.drawHighlights(ctx, phase, state, palette, wanted && !reduce.matches);
     ctx.translate(cx, cy);
-    // Long orthogonal registration axes anchor the rotating display.
-    ctx.strokeStyle = palette.fine; ctx.lineWidth = .8; ctx.globalAlpha = .9; ctx.beginPath();
-    line(-cx + 17, 0, cx - 17, 0); line(0, -cy + 14, 0, height - cy - 15);
-    for (const x of [-1, 1]) for (const y of [-1, 1]) {
-      const px = x * (R + 22), py = y * (R - 13); line(px - 4, py, px + 4, py); line(px, py - 4, px, py + 4);
-    }
-    ctx.stroke(); ring(R + 8, 0, tau, palette.line, .8, .8);
-    ctx.strokeStyle = main; ctx.lineWidth = .8; ctx.globalAlpha = .5; ctx.beginPath();
-    for (let i = 0; i < 90; i++) {
-      const a = i * tau / 90, l = i % 5 ? 3 : 8;
-      line((R + 7) * Math.cos(a), (R + 7) * Math.sin(a), (R + 7 + l) * Math.cos(a), (R + 7 + l) * Math.sin(a));
-    }
-    ctx.stroke();
     for (let i = 0; i < 4; i++) {
       const a = i * Math.PI / 2 + phase * .2;
       ring(R - 1, a, a + 1.0, main, i % 2 ? 1 : 2.5, i % 2 ? .3 : .85);
@@ -345,37 +408,16 @@ const BogoVisual = (() => {
       ctx.fillRect(x - 1, y - 1, i % 3 ? 2 : 3, i % 3 ? 2 : 3);
       if (active && i % 3 === 0) ring(r, a - .12, a, main, 1, .2);
     }
-    // Four sighting brackets anchor the rotating geometry without dummy labels.
-    ctx.globalAlpha = .72; ctx.strokeStyle = main; ctx.lineWidth = 1; ctx.beginPath();
-    for (let i = 0; i < 4; i++) {
-      const a = i * Math.PI / 2, x = Math.cos(a) * (R + 22), y = Math.sin(a) * (R + 22);
-      line(x - Math.sin(a) * 4, y + Math.cos(a) * 4, x, y);
-      line(x, y, x + Math.sin(a) * 4, y - Math.cos(a) * 4);
-    }
-    ctx.stroke();
-    // Sparse fixed registration marks share the globe's coordinates. No
-    // mirrored, expanding strips compete with the title or central readout.
-    if (width > 510) {
-      ctx.globalAlpha = .35; ctx.strokeStyle = palette.line; ctx.lineWidth = .8;
-      ctx.beginPath();
-      line(-R - 40, R * .54, -R - 24, R * .54);
-      line(-R - 24, R * .54, -R - 16, R * .66);
-      line(R + 20, -R * .57, R + 32, -R * .71);
-      line(R + 32, -R * .71, R + 48, -R * .71);
-      ctx.stroke();
-    }
     ctx.restore(); ctx.globalAlpha = 1;
     frames++; drawMs = drawMs * .95 + (performance.now() - t0) * .05;
   }
   function frame(now) {
     runningFrame = 0;
-    if (!motion()) return;
-    const fps = state === 'running' || state === 'screening' ? (drawMs > 6 ? 24 : 40) : 16;
-    if (now - lastFrame >= 1000 / fps) {
-      const dt = Math.min(.1, (now - lastFrame) / 1000); lastFrame = now;
-      phase += dt * (state === 'running' ? 1.8 : state === 'screening' ? 1.25 : .25);
-      draw();
-    }
+    if (!motion()) { syncMotion(); return; }
+    const dt = Math.min(.1, Math.max(0, (now - lastFrame) / 1000));
+    lastFrame = now;
+    phase += dt * (state === 'running' ? 1.8 : state === 'screening' ? 1.25 : .25);
+    draw();
     runningFrame = requestAnimationFrame(frame);
   }
   function syncMotion() {
@@ -415,11 +457,11 @@ const BogoVisual = (() => {
     state = next; body.dataset.state = next;
     const w = words[next] || [next.toUpperCase(), '']; $('core-word').textContent = w[0]; $('core-sub').textContent = w[1];
     $('counter-tag').textContent = next === 'running' ? 'LIVE / EXACT' : 'EXACT COUNT';
-    const resultLabels = { found: 'FACTOR\nLOCKED', prime: 'PRIME\nINPUT', probable: 'PROBABLE\nPRIME', capped: 'LIMIT\nREACHED', stopped: 'SESSION\nSTOPPED', error: 'SYSTEM\nFAULT', interrupted: 'SESSION\nCLOSED' };
+    const resultLabels = { found: 'FACTOR\nLOCKED', prime: 'PRIME\nINPUT', probable: 'PROBABLE\nPRIME', capped: 'LIMIT\nREACHED', stopped: 'SESSION\nSTOPPED', error: 'SYSTEM\nFAULT', interrupted: 'SESSION\nCLOSED', 'counter-limit': 'COUNTER\nLIMIT' };
     $('result-heading').textContent = resultLabels[next] || 'AWAITING\nRESULT';
     $('verification').textContent = next === 'found' ? 'VERIFIED / d × q = N' : 'N = d × q';
     const resultMessages = {
-      boot: 'Awaiting a search.', idle: 'Awaiting a search.',
+      boot: 'ONE GUESS. ZERO PATIENCE.', idle: 'ONE GUESS. ZERO PATIENCE.',
       screening: 'Checking the input.', running: 'Searching for a non-trivial divisor.',
       pausing: 'Pausing the search…', paused: 'Search paused.', resuming: 'Resuming the search…',
       stopping: 'Stopping the search…', stopped: 'Stopped before a divisor was found.',
@@ -478,7 +520,6 @@ const BogoVisual = (() => {
   function input(n) {
     if (n === lastInput) return;
     lastInput = n; target = n;
-    targetBits.set(n);
   }
   function reset() {
     // Retain the previous search raster while editing; begin() clears it.
@@ -522,6 +563,6 @@ const BogoVisual = (() => {
     state: change, snapshot: update, input, reset, toast, workers(count) { workerMeters.select(count); },
     ready(kind) { $('core-engine').textContent = 'WASM / ' + kind.toUpperCase(); log('CORE', 'WASM/' + kind.toUpperCase() + ' ready'); log('RNG', 'ChaCha20 · local seed'); log('SAMPLER', 'wheel/17'); log('DRAW', 'uniform · with replacement'); },
     error(text) { log('FAULT', text, 'warn'); },
-    get diagnostics() { return { state, frames, meanDrawMs: drawMs, active: !!runningFrame, fullMotion: wanted && !reduce.matches, visible, inView, sound: BogoAudio.diagnostics.wanted, sampleCount, logRows: $('event-log').children.length, canvasPixels: canvas.width * canvas.height, music: BogoAudio.diagnostics, scanGeometry: 'projected-spherical-latitude', sampleField: sampleField.diagnostics, targetBits: targetBits.diagnostics, rims: rims.diagnostics, workerMeters: workerMeters.diagnostics }; }
+    get diagnostics() { return { state, frames, meanDrawMs: drawMs, active: !!runningFrame, fullMotion: wanted && !reduce.matches, visible, inView, sound: BogoAudio.diagnostics.wanted, sampleCount, logRows: $('event-log').children.length, canvasPixels: canvas.width * canvas.height, music: BogoAudio.diagnostics, scanGeometry: 'projected-spherical-latitude', sampleField: sampleField.diagnostics, rims: rims.diagnostics, workerMeters: workerMeters.diagnostics }; }
   };
 })();

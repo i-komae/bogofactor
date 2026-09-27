@@ -46,11 +46,14 @@
     </div>
     <main class="app">
       <div class="chrome">
-      <header class="masthead">
-        <div class="system-id">
-          <span class="system-mark" aria-hidden="true"><i></i><i></i><i></i></span>
-          <span>LEAVE IT TO LUCK.</span>
+      <header class="site-header" aria-label="BOGO / FACTOR">
+        <span class="system-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <h1>BOGO<span class="slash">/</span>FACTOR<span class="title-cursor" aria-hidden="true">_</span></h1>
+        <div class="brand-caption">
+          <p class="eyebrow">RANDOM DIVISOR SEARCH</p>
+          <p class="brand-motto">LEAVE IT TO LUCK.</p>
         </div>
+        <div class="intro-meta"><span class="local-light" aria-hidden="true"></span>BEST CASE: O(1)*</div>
         <div class="toolbar" aria-label="Display controls">
           <button type="button" class="tool" id="fx-toggle" aria-pressed="true" title="Turn decorative motion off"><span class="tool-light" aria-hidden="true"></span><span id="fx-label">FX / FULL</span></button>
           <button type="button" class="tool" id="sound-toggle" aria-pressed="false" title="Play Cyber 08 — MaouDamashii">BGM / OFF</button>
@@ -58,17 +61,6 @@
           <button type="button" class="tool about-tool" id="about" aria-label="About this experiment">?</button>
         </div>
       </header>
-      <section class="deck-intro" aria-label="Bogo Factor">
-        <div>
-          <p class="eyebrow">RANDOM DIVISOR SEARCH</p>
-          <h1>BOGO<span class="slash">/</span>FACTOR<span class="title-cursor" aria-hidden="true">_</span></h1>
-        </div>
-        <div class="intro-meta">
-          <span class="local-light" aria-hidden="true"></span>
-          BEST CASE: O(1)*
-          <p>ONE GUESS. ZERO PATIENCE.</p>
-        </div>
-      </section>
       <nav class="mobile-tabs" aria-label="Workspace views">
         <button id="view-input" aria-controls="workspace" type="button" aria-pressed="true">TARGET</button>
         <button id="view-live" aria-controls="workspace" type="button" aria-pressed="false" disabled="">LIVE</button>
@@ -133,27 +125,21 @@
               <output id="candidate-count" aria-live="polite">—</output>
               <span class="candidate-note">UNIFORM DRAW · WITH REPLACEMENT</span>
             </div>
-              <section class="target-dump" aria-label="Input integer representation">
-                <div class="target-representation-heading">
-                  <h3 id="target-representation-label">TARGET / BITS</h3>
-                  <button id="target-representation-toggle" type="button" aria-controls="target-representation" aria-pressed="false">HEX</button>
+              <section class="coverage" aria-label="Expected candidate coverage">
+                <div class="coverage-heading">
+                  <span class="eyebrow">EXPECTED COVERAGE</span>
+                  <output id="coverage-value" aria-live="off">0 %</output>
                 </div>
-                <div id="target-representation" class="target-representation">
-                  <canvas id="target-bits" role="img" aria-label="Binary digits of N, most significant bit first"></canvas>
-                  <pre id="target-stream" tabindex="0" aria-label="Hexadecimal digits of N" hidden>—</pre>
-                </div>
+                <div class="coverage-plot"><canvas id="coverage-curve" role="img" aria-label="Expected fraction of candidates drawn at least once; trials range from zero to three times the candidate count"></canvas></div>
+                <p class="coverage-note" title="Expected share: 1 − (1 − 1/C)^t. The curve uses 1 − exp(−t/C); C is the number of eligible candidates, t is completed trials. This is an expectation, not a count of distinct draws.">SHARE OF CANDIDATES DRAWN AT LEAST ONCE</p>
               </section>
             </div>
-          </div>
-          <div class="payload-foot">
-            <span class="mini-cross" aria-hidden="true">+</span>
-            <span>BEST CASE: ONE TRIAL.</span>
-            <span class="mini-cross" aria-hidden="true">+</span>
           </div>
         </form>
         <section class="panel core" aria-label="Live divisor search">
           <div class="panel-heading">
             <h2>ENTROPY CORE</h2>
+            <span class="heading-meta"><span id="core-engine">WASM / INITIALIZING</span><span id="core-workers">WORKERS / READY</span></span>
             <span class="state-indicator" id="status" role="status" aria-live="polite" data-state="boot">INITIALIZING</span>
           </div>
           <div class="core-view" id="core-view">
@@ -188,10 +174,6 @@
               <dd><span id="rate">—</span><span id="rate-unit" class="unit"></span></dd>
             </div>
           </dl>
-          <div class="core-bottom">
-            <span id="core-engine">WASM / INITIALIZING</span>
-            <span id="core-workers">WORKERS / READY</span>
-          </div>
         </section>
         <aside class="side-stack" aria-label="Runtime telemetry">
           <section class="panel throughput-panel">
@@ -203,7 +185,7 @@
                 <span title="Highest measured sample in the displayed history">RECENT PEAK</span>
                 <span id="chart-peak">—</span>
               </div>
-              <svg id="rate-chart" viewBox="0 0 260 76" role="img" aria-label="Measured throughput history; no data yet"><path class="chart-grid" d="M0 12H260M0 38H260M0 64H260M52 0V76M104 0V76M156 0V76M208 0V76"></path><path id="rate-area" d="M0 76H260Z"></path><path id="rate-path" d="M0 70H260"></path></svg>
+              <svg id="rate-chart" viewBox="0 0 260 76" preserveAspectRatio="none" role="img" aria-label="Measured throughput history; no data yet"><path class="chart-grid" d="M0 12H260M0 38H260M0 64H260M52 0V76M104 0V76M156 0V76M208 0V76"></path><path id="rate-area" d="M0 76H260Z"></path><path id="rate-path" d="M0 70H260"></path></svg>
               <div class="chart-axis">
                 <span>RECENT SAMPLES</span>
                 <span>NOW</span>
@@ -235,7 +217,7 @@
           <div class="output-body" tabindex="0" aria-label="Complete divisor search result">
             <div id="factor-empty" class="factor-empty">
               <span class="empty-dashes" aria-hidden="true">— — —</span>
-              <span id="empty-message">Awaiting a search.</span>
+              <span id="empty-message">ONE GUESS. ZERO PATIENCE.</span>
             </div>
             <div id="factor-values" class="factor-values" hidden="">
               <span id="factor-d"></span>
@@ -312,7 +294,7 @@
     <script defer src="js/event-stream.js"></script>
     <script defer src="js/sample-field.js"></script>
     <script defer src="js/panel-rims.js"></script>
-    <script defer src="js/target-bits.js"></script>
+    <script defer src="js/coverage.js"></script>
     <script defer src="js/visuals.js"></script>
     <script defer src="js/engine-data.js"></script>
     <script defer src="js/worker.js"></script>

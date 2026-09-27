@@ -15,8 +15,7 @@ class PanelRims {
         period: panel.classList.contains('throughput-panel') ? 5.4 : panel.classList.contains('payload') ? 4.8 : 4.2 };
     });
     this.last = 0; this.texture = document.createElement('canvas'); this.colorKey = '';
-    this.frames = 0; this.stripPaints = 0; this.nextPaint = 0; this.signature = '';
-    this.interval = 1000 / 24;
+    this.frames = 0; this.stripPaints = 0;
     if (typeof ResizeObserver === 'function') {
       this.observer = new ResizeObserver(() => this.resize());
       for (const item of this.panels) this.observer.observe(item.panel);
@@ -49,16 +48,12 @@ class PanelRims {
     this.palette(colors);
     const dt = this.last ? Math.min(.1, Math.max(0, (now - this.last) / 1000)) : 0;
     this.last = enabled ? now : 0;
-    const signature = state + '|' + enabled + '|' + this.panels.map(p => p.panel.contains(document.activeElement) ? 1 : 0).join('');
-    const due = now >= this.nextPaint || signature !== this.signature || this.panels.some(p => p.dirty);
-    this.signature = signature;
     for (const item of this.panels) {
       const on = enabled && (item.panel.classList.contains('core') ? ['running', 'screening'].includes(state) :
         item.panel.classList.contains('throughput-panel') ? state === 'running' :
         item.panel.classList.contains('output') ? state === 'found' : item.panel.contains(document.activeElement));
       if (!on && !item.active && !item.dirty) continue;
       item.active = on; if (on) item.time += dt;
-      if (!due) continue;
       const lengths = [item.width, item.height, item.width, item.height], per = 2 * (item.width + item.height);
       if (!per) { item.dirty = false; continue; }
       const tail = Math.min(180, per * .12), head = item.time / item.period % 1 * per;
@@ -89,12 +84,10 @@ class PanelRims {
       });
       item.dirty = false;
     }
-    if (due) this.nextPaint = now >= this.nextPaint ?
-      this.nextPaint + (Math.floor((now - this.nextPaint) / this.interval) + 1) * this.interval : this.nextPaint;
     this.frames++;
   }
   get diagnostics() {
-    return { frames: this.frames, stripPaints: this.stripPaints, maximumPaintHz: 24, pixels: this.panels.reduce((sum, p) => sum + p.strips.reduce((s, c) => s + c.width * c.height, 0), 0),
+    return { frames: this.frames, stripPaints: this.stripPaints, clock: 'requestAnimationFrame', pixels: this.panels.reduce((sum, p) => sum + p.strips.reduce((s, c) => s + c.width * c.height, 0), 0),
       mode: 'four narrow unmasked rasters per panel' };
   }
 }

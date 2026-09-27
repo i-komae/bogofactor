@@ -48,6 +48,7 @@
   const counter = new ExactCounter($('counter-reels'), $('exact-count'), $('trial-count'));
   counter.set(0n, true);
   const speedDisplay = new RollingMetric($('rate'), 1600, $('rate-unit'));
+  const coverage = new CoveragePlot($('coverage-curve'), $('coverage-value'));
   let hasRun = false, view = 'input', requestedView = 'input';
   let viewAnimation = null, viewSequence = 0;
   const viewport = document.querySelector('.workspace');
@@ -181,6 +182,7 @@
   }
   function clearResult() {
     BogoNumbers.resetRateScale();
+    coverage.reset();
     fx('reset');
     cancelPaint();
     last = null;
@@ -216,6 +218,7 @@
       const n=BOGO.parse(input), count=BOGO.countAllowed(BOGO.sqrt(n)), text=String(count);
       $('input-bits').textContent = nf.format(n.toString(2).length) + ' BITS';
       fx('input', String(n));
+      coverage.setCandidates(count);
       if (text.length<=10) output.textContent=nf.format(count).replaceAll(',', '\u2009');
       else {
         const superscript='⁰¹²³⁴⁵⁶⁷⁸⁹';
@@ -224,7 +227,7 @@
       }
       output.title=nf.format(count)+' eligible integers up to floor(sqrt(N)); wheel-17 multiples excluded, with the small primes themselves retained.';
       output.setAttribute('aria-label',nf.format(count)+' candidates');
-    } catch (_) { $('input-bits').textContent='—'; fx('input', ''); output.textContent='—'; output.title=''; output.removeAttribute('aria-label'); }
+    } catch (_) { coverage.setCandidates(0n); $('input-bits').textContent='—'; fx('input', ''); output.textContent='—'; output.title=''; output.removeAttribute('aria-label'); }
   }
   function sizeInput() {
     updateCandidateCount();
@@ -232,7 +235,7 @@
     const digits = input.value.normalize('NFKC').replace(/[\s,_]/g, '').length;
     input.classList.toggle('long', digits > 15);
     $('input-digits').textContent = /^\d+$/.test(input.value.normalize('NFKC').replace(/[\s,_]/g, '')) ? `${digits.toLocaleString('en-US')} DIGITS` : '';
-    // The input is four complete lines in every state; overflow scrolls inside.
+    // The input is a viewport-defined number of complete lines in every state; overflow scrolls inside.
 
   }
   function editInput() {
@@ -275,6 +278,7 @@
     fx('snapshot', m);
     const trials = BigInt(m.trials), ms = Math.max(0, m.elapsedMs || 0);
     counter.set(trials, m.status !== 'running');
+    coverage.update(trials, m.status);
     const duration = trials ? BogoNumbers.duration(ms) : { text: '—', unit: '' };
     $('elapsed').textContent = duration.text;
     $('elapsed-unit').textContent = duration.unit;
@@ -440,6 +444,7 @@
     get: () => ({ status, initialized, version: '17.0', engineKind, rng: 'ChaCha20', distribution: 'uniform-wheel-17',
       pool: worker?.diagnostics || null, counter: counter.diagnostics, speed: speedDisplay.diagnostics, view,
       visuals: typeof BogoVisual !== 'undefined' ? BogoVisual.diagnostics : null,
+      coverage: coverage.diagnostics,
       lastSnapshot: last ? structuredClone(last) : null })
   });
   $('preset').value = presetByValue.get($('n-input').value) || '';

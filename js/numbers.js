@@ -175,7 +175,7 @@ class RollingMetric {
     const animation = strip.animate([
       { transform: `translateY(${fromY}em)` },
       { transform: `translateY(${toY}em)` }
-    ], { duration: 600 + (rows.length - 2) * 45, easing: 'cubic-bezier(.32,.05,.2,1)' });
+    ], { duration: 260 + (rows.length - 2) * 14, easing: 'cubic-bezier(.32,.05,.2,1)' });
     this.animations.set(cell, animation);
     animation.onfinish = () => {
       // A previous animation cannot remove a newly started strip.
@@ -242,8 +242,11 @@ class RollingMetric {
     return true;
   }
   resize() {
-    const placeholder = '0'.repeat(this.integerPlaces) + '.00' + (this.externalUnit ? '' : ' ' + (this.unit || 'M/s'));
-    BogoNumbers.fit(this.el, placeholder);
+    // Compact worker lanes omit leading blank columns. Fit the actual reading,
+    // not four invisible integer places, so the requested 9px text stays 9px.
+    const worker = this.el.parentElement.classList.contains('worker-lane');
+    const digits = worker && /^\d+\.\d{2}$/.test(this.text) ? this.text : '0'.repeat(this.integerPlaces) + '.00';
+    BogoNumbers.fit(this.el, digits + (this.externalUnit ? '' : ' ' + (this.unit || 'M/s')));
   }
   reset() {
     this.finish(); this.at = -Infinity; this.text = ''; this.unit = ''; this.integerPlaces = 4;

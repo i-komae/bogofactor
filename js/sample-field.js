@@ -125,7 +125,7 @@ class SampleField {
   }
   edgeOpacity(y) {
     // The fade changes opacity only, never the mapping or the count of samples.
-    const t = Math.min(1, Math.max(0, Math.min(y, this.geometry.height - y) / 28));
+    const t = Math.min(1, Math.max(0, Math.min(y / 32, (this.geometry.height - y) / 76)));
     return t * t * (3 - 2 * t);
   }
   scanlines() {
@@ -206,7 +206,7 @@ class SampleField {
       retainedCoordinates: this.size, recentHighlights: this.recent.length,
       rasterPixels: this.canvas.width * this.canvas.height,
       meanUpdateMs: this.updates ? this.totalMs / this.updates : 0,
-      geometry: this.geometry ? { ...this.geometry } : null, fadeWidth: 28,
+      geometry: this.geometry ? { ...this.geometry } : null, fade: { top: 32, bottom: 76 },
       mapping: 'area-weighted angular CDF; r²=Rin²+(1-d/floor(sqrt(N)))*(rayLimit²-Rin²)',
       hit: this.hit ? this.pixel(this.hit) : null, link: this.link ? { ...this.link } : null };
   }
