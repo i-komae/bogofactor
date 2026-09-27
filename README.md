@@ -4,8 +4,6 @@ https://i-komae.github.io/bogofactor/
 
 The best integer factorization algorithm in the world. Give it a composite N and it finds a non-trivial factor in O(1).\*
 
-Open `index.html` in a browser; there is no build step.
-
 \* Best case.
 
 ## How it works
