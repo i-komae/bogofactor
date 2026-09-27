@@ -175,6 +175,144 @@ class WorkerMeters {
   }
 }
 
+/** Decorative depth behind the reactor. Fixed geometry and a cached backplate;
+ * no trial data, candidate map, independent timer or additional animation loop.
+ * All motion uses the reactor's clock, so pause/visibility/FX rules stay shared.
+ */
+class CoreBackdrop {
+  constructor() {
+    this.plate = document.createElement('canvas');
+    this.routes = [];
+    this.key = '';
+    this.meanMs = 0;
+    this.frames = 0;
+  }
+  prepare(width, height, cx, cy, radius, palette, dpr) {
+    const key = [width, height, radius, dpr, palette.accent, palette.second, palette.line].join('|');
+    if (key === this.key) return;
+    this.key = key;
+    this.plate.width = Math.ceil(width * dpr);
+    this.plate.height = Math.ceil(height * dpr);
+    const g = this.plate.getContext('2d');
+    if (!g) return;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.routes.length = 0;
+    // Asymmetric routed traces terminate outside the existing reactor ring.
+    // Their endpoints never encroach on the centre's state or result text.
+    const count = width < 380 ? 12 : 18;
+    for (let i = 0; i < count; i++) {
+      const a = i * Math.PI * 2 / count + .17 + Math.sin(i * 2.13) * .07;
+      const outer = Math.max(width, height) * .86;
+      const bend = radius * (1.62 + (i % 3) * .12);
+      const turn = a + (i % 2 ? .09 : -.14);
+      const pts = [
+        [cx + Math.cos(a) * outer, cy + Math.sin(a) * outer * .78],
+        [cx + Math.cos(a) * bend, cy + Math.sin(a) * bend * .90],
+        [cx + Math.cos(turn) * radius * 1.30, cy + Math.sin(turn) * radius * 1.30],
+        [cx + Math.cos(turn) * radius * 1.11, cy + Math.sin(turn) * radius * 1.11]
+      ];
+      let length = 0;
+      const segments = [];
+      for (let k = 1; k < pts.length; k++) {
+        const dx = pts[k][0] - pts[k - 1][0], dy = pts[k][1] - pts[k - 1][1];
+        const span = Math.hypot(dx, dy);
+        if (span > .001) segments.push({ x: pts[k - 1][0], y: pts[k - 1][1], dx: dx / span, dy: dy / span, start: length, span });
+        length += span;
+      }
+      this.routes.push({ segments, length, end: pts[3], offset: i * .61803398875, speed: 48 + i % 4 * 9 });
+      g.strokeStyle = i % 3 ? palette.accent : palette.second;
+      g.lineWidth = .7;
+      g.globalAlpha = i % 3 ? .15 : .22;
+      g.beginPath(); g.moveTo(...pts[0]);
+      for (let k = 1; k < pts.length; k++) g.lineTo(...pts[k]);
+      g.stroke();
+      g.globalAlpha = .26;
+      g.strokeRect(pts[2][0] - 1.7, pts[2][1] - 1.7, 3.4, 3.4);
+    }
+    // Rear chamber contours, intentionally oblique rather than more flat circles.
+    g.save(); g.translate(cx, cy);
+    for (let i = 0; i < 3; i++) {
+      g.strokeStyle = i === 1 ? palette.second : palette.accent;
+      g.globalAlpha = i === 1 ? .14 : .11;
+      g.lineWidth = .65;
+      g.beginPath();
+      g.ellipse(0, 0, radius * (1.63 + i * .46), radius * (1.06 + i * .30), -.24, 0, Math.PI * 2);
+      g.stroke();
+    }
+    // Small registration marks create spatial scale without unreadable labels.
+    g.strokeStyle = palette.accent; g.globalAlpha = .20; g.lineWidth = .7;
+    g.beginPath();
+    for (let i = 0; i < 28; i++) {
+      const a = i * 2.39996323, r = radius * (1.5 + (i % 7) * .22);
+      const x = Math.cos(a) * r, y = Math.sin(a) * r * .78;
+      if (Math.hypot(x, y) < radius * 1.17) continue;
+      g.moveTo(x - 1.5, y); g.lineTo(x + 1.5, y);
+      if (i % 3 === 0) { g.moveTo(x, y - 1.5); g.lineTo(x, y + 1.5); }
+    }
+    g.stroke(); g.restore();
+  }
+  trace(ctx, route, from, to) {
+    for (const segment of route.segments) {
+      const lo = Math.max(from, segment.start), hi = Math.min(to, segment.start + segment.span);
+      if (hi <= lo) continue;
+      const a = lo - segment.start, b = hi - segment.start;
+      ctx.moveTo(segment.x + segment.dx * a, segment.y + segment.dy * a);
+      ctx.lineTo(segment.x + segment.dx * b, segment.y + segment.dy * b);
+    }
+  }
+  draw(ctx, width, height, cx, cy, radius, palette, dpr, phase, state, enabled) {
+    const started = performance.now();
+    this.prepare(width, height, cx, cy, radius, palette, dpr);
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.drawImage(this.plate, 0, 0, width, height);
+    const active = state === 'running' || state === 'screening';
+    const color = state === 'found' ? palette.success : state === 'screening' ? palette.amber : palette.accent;
+    if (enabled) {
+      // Three bounded trail sections: no full-surface blur or pixel reads.
+      for (let pass = 0; pass < 3; pass++) {
+        ctx.strokeStyle = pass === 0 ? palette.second : color;
+        ctx.globalAlpha = (active ? .72 : .16) * [.16, .40, .85][pass];
+        ctx.lineWidth = pass === 0 ? 2.1 : pass === 1 ? 1.2 : 1.0;
+        ctx.beginPath();
+        for (let i = 0; i < this.routes.length; i++) {
+          const route = this.routes[i];
+          const cycle = route.length + 130 + i % 3 * 40;
+          let head = (phase * route.speed + route.offset * cycle) % cycle;
+          if (i % 4 === 0) head = route.length - head;
+          const from = head - 36 + pass * 12;
+          this.trace(ctx, route, from, from + 12);
+        }
+        ctx.stroke();
+      }
+      // Broad, dim pulses recede through the rear chamber, behind the globe.
+      // They are clipped out of the text's quiet aperture, not drawn over it.
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, 0, width, height);
+      ctx.moveTo(cx + radius * 1.07, cy);
+      ctx.arc(cx, cy, radius * 1.07, 0, Math.PI * 2, true); ctx.clip('evenodd');
+      for (let i = 0; i < 3; i++) {
+        const u = (phase * .16 + i / 3) % 1;
+        const fade = Math.sin(Math.PI * u) ** 2;
+        ctx.strokeStyle = i === 1 ? palette.second : color;
+        ctx.globalAlpha = fade * (active ? .27 : .065);
+        ctx.lineWidth = i === 1 ? 1.3 : .85;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, radius * (1.2 + u * 2.0), radius * (.85 + u * 1.10), -.24, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+    this.frames++;
+    this.meanMs += (performance.now() - started - this.meanMs) * .05;
+  }
+  get diagnostics() {
+    return { frames: this.frames, meanDrawMs: this.meanMs, routes: this.routes.length,
+      cachedPixels: this.plate.width * this.plate.height };
+  }
+}
+
 /** Presentation only. Never reads or changes the engine's PRNG or trial counter. */
 const BogoVisual = (() => {
   const $ = id => document.getElementById(id);
@@ -197,6 +335,7 @@ const BogoVisual = (() => {
   let lastTelemetry = -Infinity;
   const workerMeters = new WorkerMeters($('worker-lanes'));
   const activity = new EventStream($('event-log'));
+  const backdrop = new CoreBackdrop();
   // Equal angular rings give a stable wireframe, not fabricated factor candidates.
   for (let lat = 0; lat < 9; lat++) for (let lon = 0; lon < 20; lon++) {
     const a = (lat + 1) * Math.PI / 10, b = lon * Math.PI / 10, i = (lat * 20 + lon) * 3;
@@ -231,6 +370,7 @@ const BogoVisual = (() => {
     const cx = width / 2, cy = height * .45, R = Math.min(height * .385, width * .34);
     const active = state === 'running' || state === 'screening';
     const main = state === 'found' ? palette.success : state === 'paused' || state === 'screening' ? palette.amber : palette.accent;
+    backdrop.draw(ctx, width, height, cx, cy, R, palette, dpr, phase, state, wanted && !reduce.matches);
     ctx.translate(cx, cy);
     // Long orthogonal registration axes anchor the rotating display.
     ctx.strokeStyle = palette.fine; ctx.lineWidth = .8; ctx.globalAlpha = .9; ctx.beginPath();
@@ -513,6 +653,6 @@ const BogoVisual = (() => {
     state: change, snapshot: update, input, reset, toast,
     ready(kind) { $('core-engine').textContent = 'WASM / ' + kind.toUpperCase(); $('engine-mode').textContent = 'WASM / ' + kind.toUpperCase(); log('CORE', 'WASM/' + kind.toUpperCase() + ' ready'); log('RNG', 'ChaCha20 · local seed'); },
     error(text) { log('FAULT', text, 'warn'); },
-    get diagnostics() { return { state, frames, meanDrawMs: drawMs, active: !!runningFrame, fullMotion: wanted && !reduce.matches, visible, inView, sound: BogoAudio.diagnostics.wanted, sampleCount, logRows: $('event-log').children.length, canvasPixels: canvas.width * canvas.height, music: BogoAudio.diagnostics, scanGeometry: 'projected-spherical-latitude', workerMeters: workerMeters.diagnostics }; }
+    get diagnostics() { return { state, frames, meanDrawMs: drawMs, active: !!runningFrame, fullMotion: wanted && !reduce.matches, visible, inView, sound: BogoAudio.diagnostics.wanted, sampleCount, logRows: $('event-log').children.length, canvasPixels: canvas.width * canvas.height, music: BogoAudio.diagnostics, scanGeometry: 'projected-spherical-latitude', backdrop: backdrop.diagnostics, workerMeters: workerMeters.diagnostics }; }
   };
 })();
