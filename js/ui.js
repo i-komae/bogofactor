@@ -111,7 +111,8 @@
   // Phones show expected coverage in the LIVE tab's result slot, TELEMETRY in its
   // place in TARGET (between the candidate count and the selects), and TARGET's
   // INITIATE and ABORT at the foot of its view, where LIVE has its own. On its side,
-  // TARGET keeps them with its selects, and LIVE moves the count and stats beside the core.
+  // the tabs join the header's bar, TARGET keeps its actions with its selects, and
+  // LIVE moves the count and stats beside the core.
   const coverageSection = document.querySelector('.coverage'), telemetry = document.querySelector('.telemetry-body');
   const actions = document.querySelector('.search-controls .actions'), controlsHome = document.querySelector('.search-controls');
   const trialBlock = document.querySelector('.trial-block'), stats = document.querySelector('.stats');
@@ -125,6 +126,8 @@
     if (phone && !side) move(actions, $('target-dock'));
     else move(actions, controlsHome, controlsHome.querySelector('.key-hint'));
     for (const node of [trialBlock, stats]) move(node, side ? $('live-readout') : core);
+    const header = document.querySelector('.site-header');
+    if (side) move(tabs, header, header.querySelector('.toolbar')); else move(tabs, header.parentElement, header.nextSibling);
   }
   placePanels(); commitView(view);
   const relayout = () => {

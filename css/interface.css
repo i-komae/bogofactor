@@ -450,33 +450,39 @@ body[data-state] .panel.is-tracing { border-color: var(--line); }
   .coverage-plot { flex: 1 0 90px; }
 }
 /* Landscape phones (after the tablet rules, which a phone on its side may also match):
-   every view takes the full height. Brand, toolbar and tabs form a rail
-   on the left (the tabs at the bottom, under the left thumb). LIVE gives the core the whole
-   height, with the count, the result and the actions on the right; TARGET gives the digits
-   the left and the chart, selects and INITIATE the right. The two-line log is left out. */
+   the header folds into one thin bar (brand, view tabs, toolbar) and the views take the
+   rest. LIVE centres the core at their full height, the count and readings at its left,
+   the result and actions at its right; TARGET gives the digits the left and the chart,
+   selects and INITIATE the right. The two-line log is left out. */
 @media (max-width:760px) and (orientation:landscape) and (max-height:590px), (pointer:coarse) and (orientation:landscape) and (max-height:590px) {
-  .app { display: grid; grid-template-columns: clamp(116px,15vw,128px) minmax(0,1fr); grid-template-rows: minmax(0,1fr); column-gap: 12px; max-width: none; padding: 10px 12px; }
-  .chrome { grid-column: 1; grid-row: 1; justify-content: space-between; gap: 12px; min-height: 0; }
-  .site-header { grid-template-columns: 20px minmax(0,1fr); grid-template-rows: 20px auto auto; row-gap: 10px; }
+  .app { display: grid; grid-template-columns: minmax(0,1fr); grid-template-rows: 30px minmax(0,1fr); row-gap: 8px; max-width: none; padding: 8px 12px; }
+  .chrome { grid-row: 1; flex-direction: row; align-items: center; gap: 0; min-height: 0; }
+  .site-header { display: flex; flex: 1 1 auto; align-items: center; gap: 12px; height: 30px; min-width: 0; }
   .site-header::after, .site-header .brand-caption { display: none; }
-  .site-header h1 { grid-column: 1 / -1; grid-row: 2; margin: 0; font-size: 21px; line-height: 1.1; }
-  .site-header h1 .slash::after { content: '\A'; white-space: pre; }
-  .site-header .toolbar { grid-column: 1 / -1; grid-row: 3; justify-self: stretch; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 0 0; }
-  .site-header #fx-toggle, .site-header #sound-toggle { grid-column: 1 / -1; min-width: 0; }
+  .site-header h1 { margin: 0; font-size: 18px; line-height: 1; }
+  /* ui.js moves the tabs into the bar, before the toolbar. */
+  .site-header .mobile-tabs { flex: 0 0 clamp(170px,25vw,220px); min-height: 30px; margin-left: auto; }
+  .mobile-tabs button { min-height: 30px; padding: 4px 6px; }
   .mobile-tabs button, .tab-thumb-labels > span { font-size: 10px; letter-spacing: .06em; }
-  .workspace { grid-column: 2; grid-row: 1; margin: 0 -12px; }
-  #pane-live { display: grid; grid-template-columns: minmax(0,1fr) clamp(220px,28vw,240px); grid-template-rows: minmax(0,1fr) 116px 46px; gap: 10px; }
-  #pane-live .core { grid-column: 1; grid-row: 1 / -1; min-height: 0; }
+  .site-header .toolbar { display: flex; gap: 6px; margin: 0; }
+  .site-header .tool { min-height: 30px; padding: 5px 8px; }
+  .workspace { grid-row: 2; margin: 0 -12px; }
+  #pane-live { display: grid; grid-template-columns: clamp(168px,23vw,204px) minmax(0,1fr) clamp(200px,26vw,226px); grid-template-rows: minmax(0,1fr) 46px; gap: 10px; }
+  #pane-live .readout { display: flex; grid-column: 1; grid-row: 1 / -1; flex-direction: column; justify-content: center; min-height: 0; overflow: hidden; }
+  #pane-live .readout .stats { grid-template-columns: minmax(0,1fr); gap: 12px; }
+  #pane-live .readout .counter-heading { flex-wrap: wrap; row-gap: 3px; }
+  #pane-live .core { grid-column: 2; grid-row: 1 / -1; min-height: 0; }
   #pane-live .core-view { min-height: 0; }
   #pane-live .core-activity { display: none; }
-  #pane-live .readout { display: flex; grid-column: 2; grid-row: 1; flex-direction: column; justify-content: center; min-height: 0; overflow: hidden; }
-  #pane-live .output { grid-column: 2; grid-row: 2; }
+  #pane-live .output { grid-column: 3; grid-row: 1; height: auto; min-height: 0; max-height: none; grid-template-columns: minmax(0,1fr); grid-template-rows: auto minmax(0,1fr) auto; }
+  /* The tall result: heading, then the factors, then SHARE under them. */
+  #pane-live .output .copy { grid-column: 1; grid-row: 3; justify-self: stretch; margin: 0 13px 12px; }
   /* A narrow slot puts the coverage value under its label rather than cut it. */
   #output-panel .coverage-heading { flex-wrap: wrap; row-gap: 0; }
   #output-panel #coverage-value { margin-left: auto; font-size: 16px; }
-  #pane-live .mobile-dock { position: static; grid-column: 2; grid-row: 3; }
+  #pane-live .mobile-dock { position: static; grid-column: 3; grid-row: 2; }
   .target-dock { display: none; }
-  #pane-live .mobile-dock .primary { gap: 8px; padding: 10px; font-size: 11px; }
+  #pane-live .mobile-dock .primary { gap: 6px; padding: 10px 8px; font-size: 11px; letter-spacing: .02em; white-space: nowrap; }
   #pane-live .mobile-dock .abort { flex-basis: 56px; }
   .payload { flex: 1 1 auto; min-height: 0; }
   .payload-body { display: grid; grid-template-columns: minmax(0,1fr) 222px; grid-template-rows: auto minmax(0,1fr) auto auto; column-gap: 18px; padding: 12px 14px; }

@@ -184,9 +184,10 @@ CLIPPED = """(()=>{ const out=[]; const inside=(sel, box)=>{ const e=document.qu
   return {clipped:out, banner, divisor:ld.textContent, font:getComputedStyle(ld).fontSize}; })()"""
 
 SIDEWAYS = """(()=>{ const pane=document.getElementById('pane-live'), core=pane.querySelector('.core').getBoundingClientRect();
+  const left=s=>{const r=document.querySelector(s).getBoundingClientRect(); return r.width>0 && r.right<=core.left+1};
   const right=s=>{const r=document.querySelector(s).getBoundingClientRect(); return r.width>0 && r.left>=core.right-1};
   return {live:[pane.scrollHeight, pane.clientHeight], coreHeight:Math.round(core.height),
-    beside: right('#live-readout') && right('#trial-count') && right('#output-panel') && right('#mobile-main')}; })()"""
+    beside: left('#live-readout') && left('#trial-count') && right('#output-panel') && right('#mobile-main')}; })()"""
 
 async def drag(page, cdp, x0, x1, y=450, release=True):
     touch = lambda kind, x: cdp.send('Input.dispatchTouchEvent', {'type': kind, 'touchPoints': [] if kind == 'touchEnd' else [{'x': x, 'y': y}]})
@@ -214,7 +215,7 @@ async def group_mobile(browser, url):
         r = await page.evaluate(CLIPPED)
         check(not r['clipped'] and not r['banner'], f'{tag} found: no reading is cut off by its panel, the divisor fits its banner {json.dumps(r)}')
         await page.context.close()
-    # On its side: the core takes the full height; the count, result and actions stand beside it.
+    # On its side: the core takes the views' full height, the count at its left, the result and actions at its right.
     for size in [(844, 390), (667, 375)]:
         page = await open_page(browser, url, size, True)
         tag = f'{size[0]}x{size[1]}'
