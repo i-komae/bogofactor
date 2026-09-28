@@ -170,8 +170,18 @@ PAGER = """(()=>{ const ws=document.getElementById('workspace'), f=id=>{const e=
   const c=document.getElementById('reactor');
   return {view:bogoDiagnostics.view, scroll:Math.round(ws.scrollLeft), max:ws.scrollWidth-ws.clientWidth, target:f('pane-input'), live:f('pane-live'),
     start:Math.round(document.getElementById('start').getBoundingClientRect().y), telemetry:!!document.querySelector('.payload .telemetry-body'),
-    slide:+getComputedStyle(document.getElementById('dock-track')).getPropertyValue('--slide'),
+    slide:+getComputedStyle(document.querySelector('.mobile-tabs')).getPropertyValue('--slide'),
+    dockWithView:Math.round(document.getElementById('live-dock').getBoundingClientRect().left-document.getElementById('pane-live').getBoundingClientRect().left),
     canvas:[c.width, c.height], redraws:bogoDiagnostics.visuals.sampleField.redraws}; })()"""
+
+# Every reading lies inside its panel; the locked divisor fits its banner on one line.
+CLIPPED = """(()=>{ const out=[]; const inside=(sel, box)=>{ const e=document.querySelector(sel); if(!e) return; const r=e.getBoundingClientRect(); if(!r.width||!r.height) return;
+    const b=e.closest(box).getBoundingClientRect(); if(r.bottom>b.bottom+.5||r.top<b.top-.5||r.right>b.right+.5) out.push(sel); };
+  for (const s of ['#trial-count','#elapsed','#rate','.stats dt','#counter-tag']) inside(s, '.panel');
+  for (const s of ['#factor-values','#result-heading']) inside(s, '#output-panel');
+  const lb=document.getElementById('lock-banner'), ld=document.getElementById('locked-divisor');
+  const banner=lb.scrollHeight>lb.clientHeight+1 || ld.scrollWidth>ld.clientWidth+1 || ld.getBoundingClientRect().height>parseFloat(getComputedStyle(ld).lineHeight)*1.5;
+  return {clipped:out, banner, divisor:ld.textContent, font:getComputedStyle(ld).fontSize}; })()"""
 
 SIDEWAYS = """(()=>{ const pane=document.getElementById('pane-live'), core=pane.querySelector('.core').getBoundingClientRect();
   const right=s=>{const r=document.querySelector(s).getBoundingClientRect(); return r.width>0 && r.left>=core.right-1};
@@ -186,7 +196,8 @@ async def drag(page, cdp, x0, x1, y=450, release=True):
 
 async def group_mobile(browser, url):
     print('\n[mobile] swipeable views that fit, upright and on the side; coverage in the 116px LIVE slot during a search')
-    for size in [PHONE, (390, 664)]:
+    # 402x715 is about what Safari leaves on an iPhone 17; 390x664 a shorter phone.
+    for size in [PHONE, (402, 715), (390, 664)]:
         page = await open_page(browser, url, size, True)
         tag = f'{size[0]}x{size[1]}'
         ys = set()
@@ -198,6 +209,10 @@ async def group_mobile(browser, url):
         await page.tap('#start'); await page.wait_for_timeout(2500)
         r = await page.evaluate(PAGER)
         check(r['view'] == 'live' and r['live'][0] <= r['live'][1], f'{tag} running: LIVE fits without scrolling {json.dumps({k: r[k] for k in ("view", "live")})}')
+        await page.tap('#mobile-stop'); await status(page, ['stopped']); await page.tap('#mobile-new'); await page.wait_for_timeout(700)
+        await page.fill('#n-input', str(1000000007 * 1000000009)); await page.tap('#start'); await status(page, ['found']); await page.wait_for_timeout(1200)
+        r = await page.evaluate(CLIPPED)
+        check(not r['clipped'] and not r['banner'], f'{tag} found: no reading is cut off by its panel, the divisor fits its banner {json.dumps(r)}')
         await page.context.close()
     # On its side: the core takes the full height; the count, result and actions stand beside it.
     for size in [(844, 390), (667, 375)]:
@@ -229,8 +244,8 @@ async def group_mobile(browser, url):
     a = await page.evaluate(PAGER)
     await drag(page, cdp, 80, 80 + 390 * .4, release=False); await page.wait_for_timeout(50)
     m = await page.evaluate(PAGER)
-    check(0 < m['scroll'] < m['max'] and abs(m['slide'] - m['scroll'] / m['max']) < .01,
-          f'mid-swipe: views, tab thumb and actions move together (scroll {m["scroll"]}/{m["max"]}, slide {m["slide"]:.3f})')
+    check(0 < m['scroll'] < m['max'] and abs(m['slide'] - m['scroll'] / m['max']) < .01 and m['dockWithView'] == a['dockWithView'],
+          f'mid-swipe: views, tab thumb and actions move together (scroll {m["scroll"]}/{m["max"]}, slide {m["slide"]:.3f}, actions at {m["dockWithView"]}px in their view)')
     await cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []}); await page.wait_for_timeout(700)
     await drag(page, cdp, 60, 330); await page.wait_for_timeout(700)
     b = await page.evaluate(PAGER)

@@ -141,6 +141,8 @@
               <div class="target-side"></div>
             </div>
           </form>
+          <!-- Phones: TARGET's INITIATE and ABORT, at the foot of its view (ui.js moves them). -->
+          <div class="target-dock" id="target-dock"></div>
         </div>
         <div class="pane" id="pane-live">
           <section class="panel core" aria-label="Live divisor search">
@@ -239,15 +241,11 @@
             <button type="button" id="copy" class="copy" hidden=""><span id="copy-label">SHARE</span><span aria-hidden="true">↗</span></button>
             <div class="result-flare" aria-hidden="true"></div>
           </section>
-        </div>
-      </div>
-      <!-- Phones: each view's actions, fixed at the bottom; they slide with their view. -->
-      <div class="dock-track" id="dock-track">
-        <div class="target-dock" id="target-dock"></div>
-        <div class="mobile-dock" id="live-dock">
-          <button id="mobile-main" type="button" class="primary"><span id="mobile-main-label">PAUSE SEARCH</span><svg class="action-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 4L15 10L7 16Z"></path></svg></button>
-          <button id="mobile-stop" class="abort" type="button">ABORT</button>
-          <button id="mobile-new" class="primary" type="button" hidden="">NEW TARGET <span aria-hidden="true">↗</span></button>
+          <div class="mobile-dock" id="live-dock">
+            <button id="mobile-main" type="button" class="primary"><span id="mobile-main-label">PAUSE SEARCH</span><svg class="action-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 4L15 10L7 16Z"></path></svg></button>
+            <button id="mobile-stop" class="abort" type="button">ABORT</button>
+            <button id="mobile-new" class="primary" type="button" hidden="">NEW TARGET <span aria-hidden="true">↗</span></button>
+          </div>
         </div>
       </div>
       <noscript>

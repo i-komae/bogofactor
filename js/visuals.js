@@ -471,6 +471,7 @@ const BogoVisual = (() => {
       output.textContent = divisor.length > 22 && height < 150 ? divisor.slice(0, 10) + '…' + divisor.slice(-10) :
         divisor.length > 60 ? divisor.slice(0, 28) + '…' + divisor.slice(-28) : divisor;
       output.classList.toggle('long', divisor.length > 24);
+      output.style.setProperty('--lock-chars', String(Math.max(1, output.textContent.length)));
     }
     state = next; body.dataset.state = next;
     const show = () => { const w = words[next] || [next.toUpperCase(), '']; $('core-word').textContent = w[0]; $('core-sub').textContent = w[1]; };

@@ -212,6 +212,11 @@ body[data-state=found] .lock-banner { display: flex; position: absolute; visibil
 .lock-banner > span:first-child { font: 8px/1.2 var(--mono); letter-spacing: .10em; color: var(--muted); }
 .lock-banner b { color: var(--success); margin: 0; font: 500 var(--lock-font,22px)/1.2 var(--sans); white-space: nowrap; letter-spacing: .035em; }
 .locked-divisor { display: block; max-width: 100%; margin: 5px 0 0; font: 18px/1.25 var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; color: var(--ink); }
+/* A small sphere makes a narrow banner: the digits shrink to fit its width (--lock-chars
+   is their count), and the caption gives way. */
+.lock-banner { container-type: inline-size; }
+.locked-divisor:not(.long) { font-size: min(18px, calc((var(--lock-width, 220px) - 26px) / (var(--lock-chars, 8) * .62))); }
+@container (max-width: 150px) { .lock-banner > span:first-child { display: none; } }
 .locked-divisor.long { font-size: 10px; }
 body[data-fx=full][data-state=found].hit-effect .lock-banner { animation: lock-acquire 650ms ease-out; }
 @keyframes lock-acquire { from { box-shadow: 0 0 0 2px var(--success); } to { box-shadow: 0 0 0 0 transparent; } }
@@ -224,8 +229,10 @@ body[data-fx=full][data-state=found].hit-effect .lock-banner { animation: lock-a
 body[data-state] .panel.is-tracing { border-color: var(--line); }
 /* Panes group the phone's two views; elsewhere their panels sit directly in the grid. */
 .pane { display: contents; }
+@keyframes tab-thumb { from { transform: translateX(0); } to { transform: translateX(calc(100% + 6px)); } }
+@keyframes tab-thumb-labels { from { transform: translateX(0); } to { transform: translateX(calc(-50% - 3px)); } }
 /* Mobile log gets a separate row, not pixels from the globe/background. */
-.core-activity, .mobile-tabs, .dock-track, .readout, .target-side { display: none; }
+.core-activity, .mobile-tabs, .target-dock, .readout, .target-side { display: none; }
 @media (min-width:761px) and (max-height:790px) {
   .app { grid-template-rows: 46px minmax(0,1fr); gap: 9px; padding: 12px 18px 8px; }
   .site-header h1 { font-size: 26px; }
@@ -298,6 +305,15 @@ body[data-state] .panel.is-tracing { border-color: var(--line); }
   .tab-thumb { position: absolute; top: 0; left: 0; bottom: 0; width: calc(50% - 3px); overflow: hidden; border: 1px solid var(--accent); background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--panel); pointer-events: none; transform: translateX(calc(var(--slide, 0) * (100% + 6px))); will-change: transform; }
   .tab-thumb-labels { position: absolute; top: -1px; bottom: -1px; left: -1px; width: calc(200% + 6px); display: grid; grid-template-columns: 1fr 1fr; gap: 6px; color: var(--accent); transform: translateX(calc(var(--slide, 0) * (-50% - 3px))); will-change: transform; }
   .tab-thumb-labels > span { display: flex; align-items: center; justify-content: center; font: 11px/1.4 var(--mono); letter-spacing: .09em; }
+  /* Where the browser can, the thumb is tied to the views' scroll position directly, so it
+     moves with the finger on every frame; elsewhere ui.js sets --slide as they scroll. */
+  @supports (animation-timeline: scroll()) and (timeline-scope: --pager) {
+    .app { timeline-scope: --pager; }
+    .workspace { scroll-timeline: --pager x; }
+    .tab-thumb { animation: tab-thumb linear both; animation-timeline: --pager; }
+    .tab-thumb-labels { animation: tab-thumb-labels linear both; animation-timeline: --pager; }
+    body[data-suspended=true] .tab-thumb, body[data-suspended=true] .tab-thumb-labels { animation-play-state: running !important; }
+  }
   /* The two views sit side by side and slide by a swipe or a tab. Both stay laid out,
      so switching never resizes the core or redraws its stars. */
   .workspace { display: flex; flex: 1 1 0; min-height: 0; min-width: 0; margin: 0 -12px; padding: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; }
@@ -307,10 +323,10 @@ body[data-state] .panel.is-tracing { border-color: var(--line); }
   .pane { display: flex; flex: 0 0 100%; flex-direction: column; gap: 10px; min-width: 0; height: 100%; padding: 1px 12px; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: none; scroll-snap-align: start; scroll-snap-stop: always; }
   .pane::-webkit-scrollbar { display: none; }
   .side-stack { display: none; }
-  /* Each view's actions sit in a fixed bar at the bottom, in the same place, and slide
-     with their view (ui.js moves TARGET's INITIATE and ABORT here). */
-  .dock-track { display: flex; flex: 0 0 46px; margin: 0 -12px; overflow: hidden; }
-  .target-dock, .mobile-dock { display: flex; flex: 0 0 100%; min-width: 0; gap: 8px; margin: 0; padding: 0 12px; transform: translateX(calc(var(--slide, 0) * -100%)); will-change: transform; }
+  /* Each view's actions sit at its foot, in the same place in both views, and slide as
+     part of it, with the browser's own scrolling (ui.js moves TARGET's INITIATE and ABORT
+     here). Should a view ever have to scroll, they stay in sight. */
+  .target-dock, .mobile-dock { position: sticky; bottom: 0; z-index: 3; display: flex; flex: 0 0 46px; min-width: 0; gap: 8px; margin: 0; padding: 0; background: var(--page); }
   .target-dock .actions { display: flex; flex: 1; min-width: 0; gap: 8px; margin: 0; }
   .target-dock .primary, .mobile-dock .primary { flex: 1; min-width: 0; min-height: 46px; }
   .target-dock .abort, .mobile-dock .abort { flex: 0 0 70px; min-height: 46px; order: 1; }
@@ -319,7 +335,9 @@ body[data-state] .panel.is-tracing { border-color: var(--line); }
   .payload { flex: 1 0 auto; }
   .payload-body { flex: 1 1 auto; padding: 14px; }
 
-  #pane-live .core { flex: 1 0 330px; min-height: 330px; }
+  /* The core grows into the free height and never clips its own content: the
+     readings below the sphere always show whole (the tiers below make room). */
+  #pane-live .core { flex: 1 1 auto; min-height: auto; overflow: visible; }
   .core-view { min-height: 144px; }
   .core-activity { display: flex; flex: 0 0 36px; height: 36px; min-height: 36px; max-height: 36px; overflow: hidden; flex-direction: column; justify-content: flex-end; padding: 2px 12px; border-top: 0; background: var(--panel); font: 9px/16px var(--mono); pointer-events: none; }
   .core-activity .event { flex: 0 0 16px; height: 16px; min-height: 16px; padding: 0; animation: none; }
@@ -346,7 +364,7 @@ body[data-state] .panel.is-tracing { border-color: var(--line); }
   .factor-values.long { font-size: 11px; }
   .copy { grid-column: 2; grid-row: 1; margin: 4px 8px 4px 0; padding: 5px 8px; min-height: 32px; font-size: 10px; }
   body[data-state=found] .lock-banner { padding: 9px 12px; gap: 3px; }
-  .locked-divisor { font-size: 15px; }
+  .locked-divisor:not(.long) { font-size: min(15px, calc((var(--lock-width, 220px) - 26px) / (var(--lock-chars, 8) * .62))); }
   .locked-divisor.long { font-size: 9px; }
 }
 @media (max-width:760px) and (max-height:650px) {
@@ -394,26 +412,28 @@ body[data-state] .panel.is-tracing { border-color: var(--line); }
   /* A shorter phone view keeps every control and the chart, and never scrolls for a long N:
      first the lanes give way, then the axis and the bit count (the selects tighten as on
      short desktop windows), and last the candidate count folds into one line. */
-  @container pane (max-height: 580px) {
+  @container pane (max-height: 636px) {
     .payload .worker-heading, .payload #worker-lanes { display: none; }
   }
-  @container pane (max-height: 520px) {
+  @container pane (max-height: 576px) {
     .payload .input-meta, .payload .chart-axis { display: none; }
     .search-controls { margin-top: 10px; }
     .search-controls .preset-setting, .search-controls .limit-row, .search-controls .worker-setting { margin-bottom: 6px; }
     .search-controls select { min-height: 30px; padding-top: 5px; padding-bottom: 5px; }
   }
-  /* A short phone keeps the whole LIVE view on screen, the stats included: the two-line
-     log gives way, the sphere's box shrinks, and the counter and stats tighten. */
-  @container pane (max-height: 455px) {
-    #pane-live .core { flex: 1 1 auto; min-height: 260px; }
+  /* A shorter phone keeps the whole LIVE view on screen, the readings included: first
+     the two-line log gives way, then the sphere's box shrinks and the counter and stats
+     tighten. (Sphere box 144 + heading, log, count, stats, result, actions and gaps 404.) */
+  @container pane (max-height: 547px) {
     #pane-live .core-activity { display: none; }
+  }
+  @container pane (max-height: 511px) {
     #pane-live .core-view { min-height: 96px; }
     #pane-live .trial-block { padding-top: 6px; padding-bottom: 4px; }
     #pane-live .counter { height: 52px; min-height: 52px; }
     #pane-live .stats { padding-top: 7px; padding-bottom: 7px; }
   }
-  @container pane (max-height: 470px) {
+  @container pane (max-height: 526px) {
     .payload-body { padding-top: 10px; padding-bottom: 10px; }
     .target-data .candidate-block { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 7px 0; }
     .target-data .candidate-block output { font-size: 17px; line-height: 1.3; white-space: nowrap; }
@@ -454,7 +474,8 @@ body[data-state] .panel.is-tracing { border-color: var(--line); }
   /* A narrow slot puts the coverage value under its label rather than cut it. */
   #output-panel .coverage-heading { flex-wrap: wrap; row-gap: 0; }
   #output-panel #coverage-value { margin-left: auto; font-size: 16px; }
-  #pane-live .mobile-dock { grid-column: 2; grid-row: 3; padding: 0; transform: none; }
+  #pane-live .mobile-dock { position: static; grid-column: 2; grid-row: 3; }
+  .target-dock { display: none; }
   #pane-live .mobile-dock .primary { gap: 8px; padding: 10px; font-size: 11px; }
   #pane-live .mobile-dock .abort { flex-basis: 56px; }
   .payload { flex: 1 1 auto; min-height: 0; }

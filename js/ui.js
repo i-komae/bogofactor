@@ -51,16 +51,16 @@
   const coverage = new CoveragePlot($('coverage-curve'), $('coverage-value'));
   let hasRun = false, view = 'input';
   const viewport = $('workspace'), panes = { input: $('pane-input'), live: $('pane-live') };
-  const docks = { input: $('target-dock'), live: $('live-dock') };
-  const tabs = document.querySelector('.mobile-tabs'), dockTrack = $('dock-track');
+  const tabs = document.querySelector('.mobile-tabs');
   const mobileQuery = matchMedia('(max-width:760px), (pointer:coarse) and (max-height:590px)');
   // A phone on its side: the same two views, laid out across (interface.css).
   const sideQuery = matchMedia('(orientation:landscape) and (max-height:590px)');
   const sideways = () => mobileQuery.matches && sideQuery.matches;
   // Phones: the two views sit side by side and slide (CSS scroll snap), by a swipe or
-  // a tab. Neither is ever hidden or re-laid out, so switching costs no layout, canvas
-  // resize or star redraw. The tab thumb follows the scroll position on every frame;
-  // the view itself is committed when the slide settles.
+  // a tab, each with its actions. Neither is ever hidden or re-laid out, so switching
+  // costs no layout, canvas resize or star redraw. The tab thumb follows the scroll
+  // position (--slide, where CSS cannot tie it to the scroll itself); the view itself
+  // is committed when the slide settles.
   function commitView(next) {
     view = next; document.body.dataset.view = next;
     $('view-input').setAttribute('aria-pressed', String(next === 'input'));
@@ -68,12 +68,10 @@
     // The view off screen stays laid out but takes no focus or input. Move focus
     // first if it would be left inside it.
     const phone = mobileQuery.matches, focus = document.activeElement;
-    for (const name of ['input', 'live']) {
+    for (const [name, pane] of Object.entries(panes)) {
       const away = phone && name !== next;
-      for (const part of [panes[name], docks[name]]) {
-        if (away && part.contains(focus)) $(next === 'input' ? 'view-input' : 'view-live').focus({ preventScroll: true });
-        part.inert = away;
-      }
+      if (away && pane.contains(focus)) $(next === 'input' ? 'view-input' : 'view-live').focus({ preventScroll: true });
+      pane.inert = away;
     }
   }
   const slide = () => Math.max(0, viewport.scrollWidth - viewport.clientWidth);
@@ -81,8 +79,7 @@
     // scrollWidth and clientWidth are rounded: the last pixel counts as the end.
     const max = slide(), left = viewport.scrollLeft;
     const progress = mobileQuery.matches && max ? (max - left <= 1 ? 1 : Math.min(1, Math.max(0, left / max))) : view === 'live' ? 1 : 0;
-    const slid = progress.toFixed(4);
-    tabs.style.setProperty('--slide', slid); dockTrack.style.setProperty('--slide', slid);
+    tabs.style.setProperty('--slide', progress.toFixed(4));
     return progress;
   }
   let settleTimer = 0;
@@ -113,8 +110,8 @@
   $('view-live').onclick = () => { if (hasRun) switchView('live'); };
   // Phones show expected coverage in the LIVE tab's result slot, TELEMETRY in its
   // place in TARGET (between the candidate count and the selects), and TARGET's
-  // INITIATE and ABORT in the bottom bar, where LIVE has its own. On its side, each
-  // view keeps its actions, and LIVE moves the count and stats beside the core.
+  // INITIATE and ABORT at the foot of its view, where LIVE has its own. On its side,
+  // TARGET keeps them with its selects, and LIVE moves the count and stats beside the core.
   const coverageSection = document.querySelector('.coverage'), telemetry = document.querySelector('.telemetry-body');
   const actions = document.querySelector('.search-controls .actions'), controlsHome = document.querySelector('.search-controls');
   const trialBlock = document.querySelector('.trial-block'), stats = document.querySelector('.stats');
@@ -127,7 +124,6 @@
     move(controlsHome, side ? targetSide : targetSide.parentElement, side ? null : targetSide);
     if (phone && !side) move(actions, $('target-dock'));
     else move(actions, controlsHome, controlsHome.querySelector('.key-hint'));
-    if (side) move(docks.live, panes.live); else move(docks.live, dockTrack);
     for (const node of [trialBlock, stats]) move(node, side ? $('live-readout') : core);
   }
   placePanels(); commitView(view);
