@@ -102,9 +102,11 @@ class ExactCounter {
     this.updates++; this.resize();
   }
   resize() {
-    const width = this.output.parentElement.clientWidth;
+    const box = this.output.parentElement, width = box.clientWidth;
     if (!width) return;
-    const ceiling = matchMedia('(max-width:760px), (pointer:coarse) and (max-height:590px)').matches ? 55 : innerHeight < 760 ? 52 : 72;
+    // Phones: at most 55px, and less when a short screen tightens the counter's box.
+    const ceiling = matchMedia('(max-width:760px), (pointer:coarse) and (max-height:590px)').matches ?
+      Math.min(55, Math.floor(box.clientHeight * .89)) : innerHeight < 760 ? 52 : 72;
     const key = `${width}/${this.text.length}/${ceiling}`;
     if (key === this.fitKey) return;
     this.fitKey = key;

@@ -6,7 +6,7 @@ Run from the repository root:
     python tools/verify.py            # all checks
     python tools/verify.py hit perf   # selected groups
 
-Groups: shots, hit, hidden, stars, mobile, rims, bgm, share, lanes, reels, input, layout, perf.
+Groups: shots, hit, hidden, chart, stars, mobile, rims, bgm, share, lanes, reels, input, layout, perf.
 Screenshots go to verify-out/ (add it to .gitignore). Exit code is non-zero if any check fails.
 The checks rely on element ids and window.bogoDiagnostics; update the
 selectors here if the markup changes, never weaken a threshold to pass.
@@ -57,12 +57,16 @@ async def press(page, phone, desktop_id, phone_id=None):
     sel = '#' + (phone_id if phone and phone_id else desktop_id)
     await (page.tap(sel) if phone else page.click(sel))
 
-# Headless Chromium never hides a tab, so visibility is simulated.
-# requestAnimationFrame keeps running here, unlike a real hidden tab.
+# Headless Chromium never hides a tab, so visibility is simulated. As in a real hidden
+# tab, animation frames are held while hidden and run when the tab shows again.
 HIDE = """(h)=>{ window.__hidden=h; if(!window.__patched){ window.__patched=true;
   Object.defineProperty(document,'hidden',{configurable:true,get:()=>window.__hidden});
-  Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>window.__hidden?'hidden':'visible'}); }
-  document.dispatchEvent(new Event('visibilitychange')); }"""
+  Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>window.__hidden?'hidden':'visible'});
+  const raf=window.requestAnimationFrame.bind(window), caf=window.cancelAnimationFrame.bind(window), held=new Map(); let next=-1;
+  window.requestAnimationFrame=cb=>{ if(!window.__hidden) return raf(cb); const id=next--; held.set(id,cb); return id; };
+  window.cancelAnimationFrame=id=>{ if(!held.delete(id)) caf(id); };
+  window.__release=()=>{ const cbs=[...held.values()]; held.clear(); for(const cb of cbs) raf(cb); }; }
+  document.dispatchEvent(new Event('visibilitychange')); if(!h) window.__release(); }"""
 
 # Hit marker: present, fully inside the panel, and green pixels at the marker and the line midpoint.
 HIT = """(()=>{ const d=bogoDiagnostics.visuals.sampleField, g=d.geometry, h=d.hit, L=d.link;
@@ -111,6 +115,25 @@ async def group_hidden(browser, url):
     check(abs(gained - rate * 11.5) <= rate * 11.5 * 0.15, f'visible rate {rate:.1f}/s; hidden 10 s + 1.5 s gained {gained} (expected ≈{rate*11.5:.0f})')
     await page.context.close()
 
+# Throughput chart: one reading of the recent rate per 0.5 s of search time, recorded as
+# worker reports arrive. A hidden tab draws no frames, yet its time is on the chart after.
+async def group_chart(browser, url):
+    print('\n[chart] the throughput history keeps its clock while the tab is hidden')
+    page = await open_page(browser, url)
+    await page.select_option('#preset', 'rsa2048'); await page.select_option('#workers', '2'); await page.click('#start')
+    await page.wait_for_timeout(6000)
+    get = "[bogoDiagnostics.visuals.historyTotal, bogoDiagnostics.lastSnapshot.elapsedMs]"
+    a = await page.evaluate(get)
+    await page.evaluate(HIDE, True); await page.wait_for_timeout(15000)
+    frozen = await page.evaluate(get)
+    await page.evaluate(HIDE, False); await page.wait_for_timeout(700)
+    b = await page.evaluate(get)
+    gained, expected = b[0] - a[0], (b[1] - a[1]) / 500
+    check(frozen[0] == a[0] and abs(gained - expected) <= 2,
+          f'hidden 15 s: no frames while hidden ({a[0]} -> {frozen[0]}), then {gained} readings for {(b[1] - a[1]) / 1000:.1f} s of search (expected ≈{expected:.0f})')
+    check(abs(b[0] - b[1] // 500) <= 2, f'readings match search time: {b[0]} readings, elapsed {b[1] / 1000:.1f} s')
+    await page.context.close()
+
 # Background stars (5-2): brightness tiers follow q = min(N mod d, d - N mod d) / d, which is
 # uniform on [0, 0.5]; snapshots carry (v, u, q) numbers only, never divisor strings.
 FIELD = """(()=>{ const w=(bogoDiagnostics.lastSnapshot||{}).workers||[]; return w.map(x=>{ const f=x.fieldSamples;
@@ -142,24 +165,88 @@ SLOT = """(()=>{ const o=document.getElementById('output-panel'), c=document.que
   return {state:bogoDiagnostics.status, slot:Math.round(o.getBoundingClientRect().height), inTarget:document.getElementById('form').contains(c),
     inSlot:o.contains(c), shown:c.getBoundingClientRect().height>0, body:document.querySelector('.output-body').getBoundingClientRect().height>0,
     final:r.hidden?null:r.textContent}; })()"""
+# The two views slide side by side; TARGET holds TELEMETRY and never scrolls; the actions stay put.
+PAGER = """(()=>{ const ws=document.getElementById('workspace'), f=id=>{const e=document.getElementById(id); return [e.scrollHeight, e.clientHeight]};
+  const c=document.getElementById('reactor');
+  return {view:bogoDiagnostics.view, scroll:Math.round(ws.scrollLeft), max:ws.scrollWidth-ws.clientWidth, target:f('pane-input'), live:f('pane-live'),
+    start:Math.round(document.getElementById('start').getBoundingClientRect().y), telemetry:!!document.querySelector('.payload .telemetry-body'),
+    slide:+getComputedStyle(document.getElementById('dock-track')).getPropertyValue('--slide'),
+    canvas:[c.width, c.height], redraws:bogoDiagnostics.visuals.sampleField.redraws}; })()"""
+
+SIDEWAYS = """(()=>{ const pane=document.getElementById('pane-live'), core=pane.querySelector('.core').getBoundingClientRect();
+  const right=s=>{const r=document.querySelector(s).getBoundingClientRect(); return r.width>0 && r.left>=core.right-1};
+  return {live:[pane.scrollHeight, pane.clientHeight], coreHeight:Math.round(core.height),
+    beside: right('#live-readout') && right('#trial-count') && right('#output-panel') && right('#mobile-main')}; })()"""
+
+async def drag(page, cdp, x0, x1, y=450, release=True):
+    touch = lambda kind, x: cdp.send('Input.dispatchTouchEvent', {'type': kind, 'touchPoints': [] if kind == 'touchEnd' else [{'x': x, 'y': y}]})
+    await touch('touchStart', x0)
+    for k in range(1, 13): await touch('touchMove', x0 + (x1 - x0) * k / 12); await page.wait_for_timeout(16)
+    if release: await touch('touchEnd', x1)
 
 async def group_mobile(browser, url):
-    print('\n[mobile] coverage in the LIVE slot during a search, never in TARGET; slot stays 116px')
+    print('\n[mobile] swipeable views that fit, upright and on the side; coverage in the 116px LIVE slot during a search')
+    for size in [PHONE, (390, 664)]:
+        page = await open_page(browser, url, size, True)
+        tag = f'{size[0]}x{size[1]}'
+        ys = set()
+        for preset in ['long19', 'rsa1024', 'rsa2048']:
+            await page.select_option('#preset', preset); await page.wait_for_timeout(250)
+            r = await page.evaluate(PAGER); ys.add(r['start'])
+            check(r['target'][0] <= r['target'][1] and r['telemetry'], f'{tag} {preset}: TARGET fits without scrolling, TELEMETRY inside {json.dumps({k: r[k] for k in ("target", "telemetry")})}')
+        check(len(ys) == 1, f'{tag}: INITIATE stays at y {sorted(ys)}')
+        await page.tap('#start'); await page.wait_for_timeout(2500)
+        r = await page.evaluate(PAGER)
+        check(r['view'] == 'live' and r['live'][0] <= r['live'][1], f'{tag} running: LIVE fits without scrolling {json.dumps({k: r[k] for k in ("view", "live")})}')
+        await page.context.close()
+    # On its side: the core takes the full height; the count, result and actions stand beside it.
+    for size in [(844, 390), (667, 375)]:
+        page = await open_page(browser, url, size, True)
+        tag = f'{size[0]}x{size[1]}'
+        for preset in ['long19', 'rsa2048']:
+            await page.select_option('#preset', preset); await page.wait_for_timeout(250)
+            r = await page.evaluate(PAGER)
+            check(r['target'][0] <= r['target'][1], f'{tag} {preset}: TARGET fits without scrolling {json.dumps(r["target"])}')
+        await page.tap('#start'); await page.wait_for_timeout(2500)
+        r = await page.evaluate(SIDEWAYS)
+        check(r['live'][0] <= r['live'][1] and r['coreHeight'] >= r['live'][1] - 4 and r['beside'],
+              f'{tag} running: core takes the full height, the rest beside it {json.dumps(r)}')
+        check(not page.errors, f'{tag}: no page errors {page.errors[:2]}')
+        await page.context.close()
     page = await open_page(browser, url, PHONE, True)
+    cdp = await page.context.new_cdp_session(page)
     r = await page.evaluate(SLOT)
     check(not r['inTarget'] and r['inSlot'], f'idle: coverage not in TARGET {json.dumps(r)}')
+    await drag(page, cdp, 330, 60); await page.wait_for_timeout(600)
+    r = await page.evaluate(PAGER)
+    check(r['scroll'] == 0 and r['view'] == 'input', f'before the first search a swipe stays on TARGET {json.dumps({k: r[k] for k in ("scroll", "view")})}')
     await page.select_option('#preset', 'rsa2048'); await page.tap('#start'); await page.wait_for_timeout(2500)
     for name in ['running', 'paused']:
         if name == 'paused': await page.tap('#mobile-main'); await status(page, ['paused'])
         r = await page.evaluate(SLOT)
         check(r['slot'] == 116 and r['shown'] and not r['body'] and not r['inTarget'], f'{name}: coverage in the slot {json.dumps(r)}')
+    await page.tap('#mobile-main'); await status(page, ['running']); await page.wait_for_timeout(500)
+    a = await page.evaluate(PAGER)
+    await drag(page, cdp, 80, 80 + 390 * .4, release=False); await page.wait_for_timeout(50)
+    m = await page.evaluate(PAGER)
+    check(0 < m['scroll'] < m['max'] and abs(m['slide'] - m['scroll'] / m['max']) < .01,
+          f'mid-swipe: views, tab thumb and actions move together (scroll {m["scroll"]}/{m["max"]}, slide {m["slide"]:.3f})')
+    await cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []}); await page.wait_for_timeout(700)
+    await drag(page, cdp, 60, 330); await page.wait_for_timeout(700)
+    b = await page.evaluate(PAGER)
+    await drag(page, cdp, 330, 60); await page.wait_for_timeout(700)
+    c = await page.evaluate(PAGER)
+    check(b['view'] == 'input' and b['scroll'] == 0 and c['view'] == 'live' and c['scroll'] == c['max'], f'swipes switch views: right -> {b["view"]}, left -> {c["view"]}')
+    check(a['canvas'] == b['canvas'] == c['canvas'] and a['redraws'] == c['redraws'],
+          f'switching never resizes the core or redraws its stars: canvas {a["canvas"]} -> {c["canvas"]}, redraws {a["redraws"]} -> {c["redraws"]}')
     await page.tap('#mobile-stop'); await status(page, ['stopped'])
     r = await page.evaluate(SLOT)
     check(r['slot'] == 116 and not r['shown'] and r['body'] and (r['final'] or '').startswith('COVERAGE '), f'stopped: result with final coverage {json.dumps(r)}')
-    await page.tap('#mobile-new'); await page.wait_for_timeout(400)
+    await page.tap('#mobile-new'); await page.wait_for_timeout(700)
     await page.fill('#n-input', SEMI); await page.tap('#start'); await status(page, ['found']); await page.wait_for_timeout(500)
     r = await page.evaluate(SLOT)
     check(r['slot'] == 116 and r['body'] and (r['final'] or '').startswith('COVERAGE '), f'found: result with final coverage {json.dumps(r)}')
+    check(not page.errors, f'phone: no page errors {page.errors[:2]}')
     await page.context.close()
 
 # Border light (5-4): one lap on the core at a search start, one green lap on the result
@@ -324,7 +411,7 @@ async def group_shots(browser, url):
             await page.context.close()
     print(f'  saved to {OUT}')
 
-GROUPS = {'shots': group_shots, 'hit': group_hit, 'hidden': group_hidden, 'stars': group_stars, 'mobile': group_mobile,
+GROUPS = {'shots': group_shots, 'hit': group_hit, 'hidden': group_hidden, 'chart': group_chart, 'stars': group_stars, 'mobile': group_mobile,
           'rims': group_rims, 'bgm': group_bgm, 'share': group_share, 'lanes': group_lanes, 'reels': group_reels, 'input': group_input,
           'layout': group_layout, 'perf': group_perf}
 

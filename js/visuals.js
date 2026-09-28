@@ -24,6 +24,9 @@ class WorkerMeters {
     if (this.side) this.sideObserver?.observe(this.side);
     this.heightQuery = matchMedia('(max-height:790px)');
     this.heightQuery.addEventListener('change', () => this.layout());
+    // Phones show the lanes in TARGET (ui.js moves them), in columns of their own.
+    this.phoneQuery = matchMedia('(max-width:760px), (pointer:coarse) and (max-height:590px)');
+    this.phoneQuery.addEventListener('change', () => { this.layoutKey = ''; this.layout(); });
     if (typeof IntersectionObserver === 'function') {
       this.intersection = new IntersectionObserver(entries => {
         this.inView = entries[0].isIntersecting;
@@ -73,8 +76,17 @@ class WorkerMeters {
     this.schedule();
   }
   layout() {
-    if (!this.side || !this.lanes.length || !this.side.clientHeight) return;
+    if (!this.lanes.length) return;
     const count = this.lanes.length;
+    if (this.phoneQuery.matches) {
+      // Two columns with readings; beyond eight workers, four columns of bars only.
+      const columns = count > 8 ? 4 : 2;
+      this.root.dataset.columns = String(columns);
+      this.root.style.setProperty('--lane-rows', String(Math.ceil(count / columns)));
+      this.layoutKey = '';
+      return;
+    }
+    if (!this.side || !this.side.clientHeight || !this.side.contains(this.root)) return;
     const key = [count, this.side.clientWidth, this.side.clientHeight, innerHeight].join('|');
     if (key === this.layoutKey) return;
     this.layoutKey = key;
@@ -236,11 +248,12 @@ const BogoVisual = (() => {
   let palette = {}, frames = 0, drawMs = 0;
   let toastTimer = 0, hitTimer = 0, startTimer = 0, wordTimer = 0;
   let lastInput = null, lastSnapshot = null;
-  const samples = new Float64Array(48); let sampleHead = 0, sampleCount = 0;
+  // Throughput history (newest at NOW): the pool's readings of the recent rate,
+  // one per 0.5 s of search time, recorded as reports arrive, hidden tabs included.
+  const history = []; let historyDirty = false, historyTotal = 0;
   const points = new Float64Array(9 * 20 * 3);
   const projected = new Float64Array(9 * 20 * 3);
   const scan = new Float64Array(97 * 3);
-  let lastTelemetry = -Infinity;
   const workerMeters = new WorkerMeters($('worker-lanes'));
   const activity = new EventStream($('event-log'));
   const sampleField = new SampleField(canvas);
@@ -323,7 +336,8 @@ const BogoVisual = (() => {
   function draw() {
     if (!ctx || !palette.accent || width < 70 || height < 80) return;
     const t0 = performance.now(), tau = Math.PI * 2;
-    rims.draw(t0, motion());
+    // Traces end with decorative motion or a hidden page; out of view, they wait briefly.
+    rims.draw(t0, wanted && !reduce.matches && visible, motion());
     ctx.clearRect(0, 0, width, height); ctx.save();
     // One shared geometric centre for the full dot rectangle, globe and banner.
     // Keep the scene centred; compact phones use the approved 18px reserve.
@@ -502,33 +516,35 @@ const BogoVisual = (() => {
     }
     syncMotion();
   }
-  function chart(rate) {
-    if (typeof rate !== 'number' || !Number.isFinite(rate) || rate < 0) return;
-    samples[sampleHead] = rate; sampleHead = (sampleHead + 1) % samples.length; sampleCount = Math.min(samples.length, sampleCount + 1);
-    let peak = 0;
-    for (let i = 0; i < sampleCount; i++) peak = Math.max(peak, samples[i]);
-    const max = Math.max(1, peak);
+  function record(values) {
+    if (!values?.length) return;
+    for (const value of values) if (Number.isFinite(value) && value >= 0) { history.push(value); historyTotal++; }
+    if (history.length > SearchPool.HISTORY) history.splice(0, history.length - SearchPool.HISTORY);
+    historyDirty = true;
+  }
+  function chart() {
+    if (!historyDirty) return;
+    historyDirty = false;
+    const size = SearchPool.HISTORY, count = history.length, max = Math.max(1, ...history);
     let path = '', first = 0, lastX = 0;
-    for (let i = 0; i < sampleCount; i++) {
-      const idx = (sampleHead - sampleCount + i + samples.length) % samples.length;
-      const x = (samples.length - sampleCount + i) * 260 / (samples.length - 1), y = 70 - samples[idx] / max * 60;
+    history.forEach((value, i) => {
+      // Fixed time axis: the newest reading at NOW, each step 0.5 s of search time.
+      const x = (size - count + i) * 260 / (size - 1), y = 70 - value / max * 60;
       if (!i) first = x;
       path += (i ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1); lastX = x;
-    }
+    });
     $('rate-path').setAttribute('d', path);
     $('rate-area').setAttribute('d', path + 'L' + lastX.toFixed(1) + ' 76L' + first.toFixed(1) + ' 76Z');
     if (!peakDisplay) peakDisplay = new RollingMetric($('chart-peak'));
+    const peak = count ? max : 0;
     peakDisplay.set(BogoNumbers.rate(peak));
-    $('rate-chart').setAttribute('aria-label', `Measured throughput, ${sampleCount} recent samples; peak ${fmt.format(Math.round(peak))} trials per second`);
+    $('rate-chart').setAttribute('aria-label', `Measured throughput every 0.5 s of search time, last ${count} readings; peak ${fmt.format(Math.round(peak))} trials per second`);
   }
   function update(snapshot) {
     lastSnapshot = snapshot;
     sampleField.observe(snapshot);
     workerMeters.update(snapshot);
-    if (snapshot.elapsedMs - lastTelemetry >= 500 || snapshot.status !== 'running') {
-      if (snapshot.status === 'running' && state !== 'pausing' && state !== 'stopping') chart(snapshot.rate);
-      lastTelemetry = snapshot.elapsedMs;
-    }
+    chart();
     if (state === 'running') activity.update(snapshot);
   }
   function input(n) {
@@ -537,7 +553,7 @@ const BogoVisual = (() => {
   }
   function reset() {
     // Retain the previous search raster while editing; begin() clears it.
-    lastTelemetry = -Infinity; samples.fill(0); sampleHead = 0; sampleCount = 0; activity.reset(); lastSnapshot = null; workerMeters.reset();
+    history.length = 0; historyDirty = false; historyTotal = 0; activity.reset(); lastSnapshot = null; workerMeters.reset();
     $('rate-path').setAttribute('d', 'M0 70H260'); $('rate-area').setAttribute('d', 'M0 76H260Z'); peakDisplay?.reset();
     $('rate-chart').setAttribute('aria-label', 'Measured throughput history; no data yet');
     clearTimeout(hitTimer); body.classList.remove('hit-effect');
@@ -575,9 +591,9 @@ const BogoVisual = (() => {
   colors(); size(); syncMotion(); log('BOOT', 'local engine initializing');
   return {
     state: change, snapshot: update, input, reset, toast, workers(count) { workerMeters.select(count); },
-    samples(snapshot) { sampleField.ingest(snapshot.workers || []); },
+    samples(snapshot) { sampleField.ingest(snapshot.workers || []); record(snapshot.history); },
     ready(kind) { $('core-engine').textContent = 'WASM / ' + kind.toUpperCase(); log('CORE', 'WASM/' + kind.toUpperCase() + ' ready'); log('RNG', 'ChaCha20 · local seed'); log('SAMPLER', 'wheel/17'); log('DRAW', 'uniform · with replacement'); log('FIELD', 'brightness = |N mod d| / d near 0'); },
     error(text) { log('FAULT', text, 'warn'); },
-    get diagnostics() { return { state, frames, meanDrawMs: drawMs, active: !!runningFrame, fullMotion: wanted && !reduce.matches, visible, inView, sound: BogoAudio.diagnostics.wanted, sampleCount, logRows: $('event-log').children.length, canvasPixels: canvas.width * canvas.height, music: BogoAudio.diagnostics, scanGeometry: 'projected-spherical-latitude', sampleField: sampleField.diagnostics, rims: rims.diagnostics, workerMeters: workerMeters.diagnostics }; }
+    get diagnostics() { return { state, frames, meanDrawMs: drawMs, active: !!runningFrame, fullMotion: wanted && !reduce.matches, visible, inView, sound: BogoAudio.diagnostics.wanted, history: history.slice(), historyTotal, logRows: $('event-log').children.length, canvasPixels: canvas.width * canvas.height, music: BogoAudio.diagnostics, scanGeometry: 'projected-spherical-latitude', sampleField: sampleField.diagnostics, rims: rims.diagnostics, workerMeters: workerMeters.diagnostics }; }
   };
 })();

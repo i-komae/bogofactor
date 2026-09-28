@@ -49,77 +49,99 @@
   counter.set(0n, true);
   const speedDisplay = new RollingMetric($('rate'), 1600, $('rate-unit'));
   const coverage = new CoveragePlot($('coverage-curve'), $('coverage-value'));
-  let hasRun = false, view = 'input', requestedView = 'input';
-  let viewAnimation = null, viewSequence = 0;
-  const viewport = document.querySelector('.workspace');
+  let hasRun = false, view = 'input';
+  const viewport = $('workspace'), panes = { input: $('pane-input'), live: $('pane-live') };
+  const docks = { input: $('target-dock'), live: $('live-dock') };
+  const tabs = document.querySelector('.mobile-tabs'), dockTrack = $('dock-track');
   const mobileQuery = matchMedia('(max-width:760px), (pointer:coarse) and (max-height:590px)');
-  const viewScroll = { input: 0, live: 0 };
+  // A phone on its side: the same two views, laid out across (interface.css).
+  const sideQuery = matchMedia('(orientation:landscape) and (max-height:590px)');
+  const sideways = () => mobileQuery.matches && sideQuery.matches;
+  // Phones: the two views sit side by side and slide (CSS scroll snap), by a swipe or
+  // a tab. Neither is ever hidden or re-laid out, so switching costs no layout, canvas
+  // resize or star redraw. The tab thumb follows the scroll position on every frame;
+  // the view itself is committed when the slide settles.
   function commitView(next) {
-    viewScroll[view] = viewport.scrollTop;
     view = next; document.body.dataset.view = next;
     $('view-input').setAttribute('aria-pressed', String(next === 'input'));
     $('view-live').setAttribute('aria-pressed', String(next === 'live'));
-    const targetHidden = mobileQuery.matches && next !== 'input';
-    $('form').inert = targetHidden;
-    document.querySelector('.core').inert = mobileQuery.matches && next !== 'live';
-    // Move focus only if it would be left inside the now hidden pane.
-    const focus = document.activeElement;
-    if ((targetHidden && $('form').contains(focus)) || (next === 'input' && document.querySelector('.core').contains(focus))) {
-      $(next === 'input' ? 'view-input' : 'view-live').focus({ preventScroll: true });
-    }
-    viewport.scrollTop = viewScroll[next];
-    requestAnimationFrame(resize);
-  }
-  async function switchView(next, animate = true) {
-    if (next !== 'input' && next !== 'live') return;
-    if (next === requestedView && !viewAnimation) return;
-    requestedView = next;
-    const sequence = ++viewSequence, direction = next === 'live' ? 1 : -1;
-    if (viewAnimation) { viewAnimation.cancel(); viewAnimation = null; }
-    const quiet = !animate || !mobileQuery.matches || document.body.dataset.fx === 'quiet' ||
-      matchMedia('(prefers-reduced-motion: reduce)').matches || typeof viewport.animate !== 'function';
-    if (quiet || next === view) {
-      viewport.classList.remove('view-transitioning'); commitView(next); return;
-    }
-    // Only content below the title and tabs moves. No snapshot copies or duplicate IDs.
-    viewport.classList.add('view-transitioning');
-    try {
-      viewAnimation = viewport.animate([
-        { opacity: 1, transform: 'translateX(0)' },
-        { opacity: 0, transform: `translateX(${-direction * 10}px)` }
-      ], { duration: 100, easing: 'ease-in', fill: 'forwards' });
-      await viewAnimation.finished;
-      if (sequence !== viewSequence) return;
-      viewAnimation.cancel();
-      commitView(next);
-      viewAnimation = viewport.animate([
-        { opacity: 0, transform: `translateX(${direction * 10}px)` },
-        { opacity: 1, transform: 'translateX(0)' }
-      ], { duration: 210, easing: 'cubic-bezier(.2,.6,.2,1)', fill: 'none' });
-      await viewAnimation.finished;
-    } catch (_) { /* A newer tab selection supersedes this transition. */ }
-    finally {
-      if (sequence === viewSequence) {
-        viewAnimation?.cancel(); viewAnimation = null;
-        viewport.classList.remove('view-transitioning');
+    // The view off screen stays laid out but takes no focus or input. Move focus
+    // first if it would be left inside it.
+    const phone = mobileQuery.matches, focus = document.activeElement;
+    for (const name of ['input', 'live']) {
+      const away = phone && name !== next;
+      for (const part of [panes[name], docks[name]]) {
+        if (away && part.contains(focus)) $(next === 'input' ? 'view-input' : 'view-live').focus({ preventScroll: true });
+        part.inert = away;
       }
     }
   }
+  const slide = () => Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+  function followSlide() {
+    // scrollWidth and clientWidth are rounded: the last pixel counts as the end.
+    const max = slide(), left = viewport.scrollLeft;
+    const progress = mobileQuery.matches && max ? (max - left <= 1 ? 1 : Math.min(1, Math.max(0, left / max))) : view === 'live' ? 1 : 0;
+    const slid = progress.toFixed(4);
+    tabs.style.setProperty('--slide', slid); dockTrack.style.setProperty('--slide', slid);
+    return progress;
+  }
+  let settleTimer = 0;
+  function settle() {
+    clearTimeout(settleTimer); settleTimer = 0;
+    if (!mobileQuery.matches) return;
+    const next = followSlide() > .5 ? 'live' : 'input';
+    if (next !== view) commitView(next);
+  }
+  viewport.addEventListener('scroll', () => {
+    if (!mobileQuery.matches) return;
+    followSlide();
+    // scrollend where supported; otherwise a short quiet period.
+    clearTimeout(settleTimer); settleTimer = setTimeout(settle, 160);
+  }, { passive: true });
+  viewport.addEventListener('scrollend', settle);
+  function switchView(next, animate = true) {
+    if (next !== 'input' && next !== 'live') return;
+    if (!mobileQuery.matches) { commitView(next); return; }
+    const left = next === 'live' ? slide() : 0;
+    const smooth = animate && document.body.dataset.fx !== 'quiet' && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!smooth || Math.abs(viewport.scrollLeft - left) < 1) {
+      viewport.scrollTo({ left, behavior: 'auto' }); followSlide(); commitView(next); return;
+    }
+    viewport.scrollTo({ left, behavior: 'smooth' });
+  }
   $('view-input').onclick = () => switchView('input');
   $('view-live').onclick = () => { if (hasRun) switchView('live'); };
-  // Phones show expected coverage in the LIVE tab's result slot, not in TARGET.
-  const coverageSection = document.querySelector('.coverage');
-  function placeCoverage() {
-    const home = mobileQuery.matches ? $('output-panel') : document.querySelector('.target-data');
-    if (coverageSection.parentElement !== home) home.append(coverageSection);
+  // Phones show expected coverage in the LIVE tab's result slot, TELEMETRY in its
+  // place in TARGET (between the candidate count and the selects), and TARGET's
+  // INITIATE and ABORT in the bottom bar, where LIVE has its own. On its side, each
+  // view keeps its actions, and LIVE moves the count and stats beside the core.
+  const coverageSection = document.querySelector('.coverage'), telemetry = document.querySelector('.telemetry-body');
+  const actions = document.querySelector('.search-controls .actions'), controlsHome = document.querySelector('.search-controls');
+  const trialBlock = document.querySelector('.trial-block'), stats = document.querySelector('.stats');
+  const core = document.querySelector('.panel.core'), targetSide = document.querySelector('.target-side');
+  function placePanels() {
+    const phone = mobileQuery.matches, side = sideways();
+    const move = (node, parent, before = null) => { if (node.parentElement !== parent) parent.insertBefore(node, before); };
+    move(coverageSection, phone ? $('output-panel') : document.querySelector('.target-data'));
+    move(telemetry, side ? targetSide : phone ? document.querySelector('.target-data') : document.querySelector('.throughput-panel'));
+    move(controlsHome, side ? targetSide : targetSide.parentElement, side ? null : targetSide);
+    if (phone && !side) move(actions, $('target-dock'));
+    else move(actions, controlsHome, controlsHome.querySelector('.key-hint'));
+    if (side) move(docks.live, panes.live); else move(docks.live, dockTrack);
+    for (const node of [trialBlock, stats]) move(node, side ? $('live-readout') : core);
   }
-  placeCoverage();
-  mobileQuery.addEventListener('change', () => {
-    ++viewSequence; viewAnimation?.cancel(); viewAnimation = null;
-    viewport.classList.remove('view-transitioning');
-    placeCoverage();
-    commitView(view);
-  });
+  placePanels(); commitView(view);
+  const relayout = () => {
+    clearTimeout(settleTimer); settleTimer = 0;
+    placePanels(); commitView(view);
+    // After the new layout: stay on the same view, then re-measure.
+    requestAnimationFrame(() => {
+      viewport.scrollLeft = mobileQuery.matches && view === 'live' ? slide() : 0;
+      followSlide(); resize();
+    });
+  };
+  mobileQuery.addEventListener('change', relayout);
+  sideQuery.addEventListener('change', relayout);
   $('mobile-main').onclick = () => $('form').requestSubmit();
   $('mobile-stop').onclick = () => $('stop').click();
   $('mobile-new').onclick = () => { switchView('input'); };
@@ -251,39 +273,51 @@
     $('input-digits').textContent = /^\d+$/.test(input.value.normalize('NFKC').replace(/[\s,_]/g, '')) ? `${digits.toLocaleString('en-US')} DIGITS` : '';
     fitInput();
   }
-  // INTEGER N shows every digit when it can. On the desktop layout it takes the
-  // largest size from 15px to 11px (line height 1.5x, whole lines) whose full
-  // text fits the height the coverage plot can lend; the plot keeps 64px and
-  // the controls below never move. A longer number gets an explicit head /
-  // count / tail preview at rest, and VIEW ALL. Phones and narrow windows let
-  // the field grow with its content instead of scrolling inside it.
+  // INTEGER N shows every digit when it can. It borrows height from the flexible
+  // plot below it: the coverage plot on the desktop layout (which keeps 64px), the
+  // throughput chart in a phone's TARGET view (which keeps 40px). It takes the largest
+  // size from 15px to 11px (line height 1.5x, whole lines) whose full text fits, and
+  // the controls below never move. A longer number gets an explicit head / count /
+  // tail preview at rest, and VIEW ALL. Narrow desktop windows let the field grow
+  // with its content instead of scrolling inside it.
   const nInput = $('n-input'), inputFrame = nInput.parentElement, preview = $('n-preview');
   const wideQuery = matchMedia('(min-width:1101px)');
   const measure = document.createElement('canvas').getContext('2d');
-  const inputFit = { key: '', abridged: null };
+  const inputFit = { key: '', abridged: null, room: null };
   const digitsOf = () => nInput.value.normalize('NFKC').replace(/[\s,_]/g, '');
   function fitInput() {
-    const plot = document.querySelector('.payload .coverage-plot'), width = nInput.clientWidth;
+    const width = nInput.clientWidth;
     if (!width) return;
-    const desktop = wideQuery.matches && !mobileQuery.matches && !!plot;
-    const key = [nInput.value, width, desktop, desktop ? $('form').clientHeight : 0].join('|');
+    const phone = mobileQuery.matches, side = sideways();
+    // On its side, the field has a column of its own: the frame is the room.
+    const lender = side ? inputFrame : phone ? document.querySelector('.payload #rate-chart') :
+      wideQuery.matches ? document.querySelector('.payload .coverage-plot') : null;
+    const frame = getComputedStyle(inputFrame);
+    const keep = side ? parseFloat(frame.paddingTop) + parseFloat(frame.paddingBottom) + parseFloat(frame.borderTopWidth) + parseFloat(frame.borderBottomWidth) :
+      phone ? 40 : 64;
+    // While a phone's keyboard is open the view is shorter; keep the room measured
+    // before it opened, so the digits do not shrink while they are being typed.
+    const keyboard = phone && document.body.dataset.keyboard === 'true' && inputFit.room !== null;
+    const key = [nInput.value, width, phone, side, !!lender, keyboard ? 'keyboard' : lender ? $('form').clientHeight : 0].join('|');
     if (key === inputFit.key) return;
     inputFit.key = key;
-    const style = nInput.style;
+    const style = nInput.style, top = nInput.scrollTop;
     let abridged = null;
     style.height = '0px';
-    if (!desktop) {
+    if (!lender) {
       style.removeProperty('font-size'); style.removeProperty('line-height');
       style.height = Math.max(80, nInput.scrollHeight) + 'px';
     } else {
-      // With the field empty, the plot holds all of the flexible height.
-      const room = plot.clientHeight - 64;
+      // With the field empty, the lender holds all of the flexible height.
+      const room = keyboard ? inputFit.room : lender.getBoundingClientRect().height - keep;
+      inputFit.room = room;
       let height = null;
       for (const font of [15, 14, 13, 12, 11]) {
         const line = font * 1.5;
         style.fontSize = font + 'px'; style.lineHeight = line + 'px';
         const rows = Math.max(3, Math.round(nInput.scrollHeight / line));
-        if (rows * line <= room) { height = rows * line; break; }
+        // Three lines hold it at 11px: nothing to abridge, even if the room is smaller.
+        if (rows * line <= room || (font === 11 && rows === 3)) { height = rows * line; break; }
       }
       if (height === null) {   // still 11px: as many whole lines as fit
         abridged = { rows: Math.max(3, Math.floor(room / 16.5)) };
@@ -291,6 +325,7 @@
       }
       style.height = height + 'px';
     }
+    nInput.scrollTop = top;
     inputFit.abridged = abridged;
     $('view-all').hidden = !abridged;
     renderPreview();
@@ -507,7 +542,7 @@
     $('n-input').value = String(n);
     sizeInput();
     runId++;
-    hasRun = true; $('n-input').blur(); switchView('live');
+    hasRun = true; document.body.dataset.ran = 'true'; $('n-input').blur(); switchView('live');
     setStatus('screening');
     worker.postMessage({ cmd: 'run', id: runId, n: String(n), cap: $('cap').value, workers: $('workers').value });
   });
@@ -537,6 +572,12 @@
   $('copy').addEventListener('click', () => BogoShare.open(last));
 
   const resize = () => {
+    // Keep a phone on its view when the width changes (rotation), unless a slide is under way.
+    if (mobileQuery.matches && !settleTimer) {
+      const left = view === 'live' ? slide() : 0;
+      if (Math.abs(viewport.scrollLeft - left) > .5) viewport.scrollLeft = left;
+      followSlide();
+    }
     counterWidth = $('trial-count').parentElement.clientWidth;
     fitCounter();
     speedDisplay.resize();

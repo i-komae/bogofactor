@@ -1597,10 +1597,6 @@ dialog summary {
   display: contents;
 }
 
-.view-transitioning {
-  pointer-events: none;
-}
-
 @media(prefers-color-scheme:dark) {
   :root {
     --page: #070e18;

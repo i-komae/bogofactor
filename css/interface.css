@@ -222,9 +222,10 @@ body[data-fx=full][data-state=found].hit-effect .lock-banner { animation: lock-a
 .rim-strip { position: absolute; left: 0; top: 0; height: 1px; transform-origin: 0 0; pointer-events: none; z-index: 4; }
 /* The previous border stays until the trace has laid the new one. */
 body[data-state] .panel.is-tracing { border-color: var(--line); }
+/* Panes group the phone's two views; elsewhere their panels sit directly in the grid. */
+.pane { display: contents; }
 /* Mobile log gets a separate row, not pixels from the globe/background. */
-.core-activity, .mobile-tabs, .mobile-dock { display: none; }
-.view-transitioning { pointer-events: none; }
+.core-activity, .mobile-tabs, .dock-track, .readout, .target-side { display: none; }
 @media (min-width:761px) and (max-height:790px) {
   .app { grid-template-rows: 46px minmax(0,1fr); gap: 9px; padding: 12px 18px 8px; }
   .site-header h1 { font-size: 26px; }
@@ -290,17 +291,35 @@ body[data-state] .panel.is-tracing { border-color: var(--line); }
 
   h1 { margin-top: 2px; font-size: clamp(25px,7.8vw,33px); line-height: 1.12; }
   .intro-meta { display: none; }
-  .mobile-tabs { display: grid; grid-template-columns: 1fr 1fr; min-height: 36px; gap: 6px; }
+  .mobile-tabs { position: relative; display: grid; grid-template-columns: 1fr 1fr; min-height: 36px; gap: 6px; }
   .mobile-tabs button { min-height: 36px; padding: 8px 6px; border: 1px solid var(--line); background: var(--panel); font: 11px/1.4 var(--mono); color: var(--muted); letter-spacing: .09em; }
-  .mobile-tabs button[aria-pressed=true] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
-  .workspace { flex: 1 1 0; min-height: 0; min-width: 0; margin: 0; padding: 1px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scroll-behavior: auto; }
-  body[data-view=input] .workspace { display: block; }
-  body[data-view=input] .core, body[data-view=input] .output, body[data-view=input] .mobile-dock { display: none; }
-  body[data-view=live] .workspace { display: flex; flex-direction: column; gap: 10px; }
-  body[data-view=live] .payload, .side-stack { display: none; }
-  .payload-body { min-height: 0; padding: 14px; overflow: visible; }
+  /* The selected tab is a thumb that follows the panes while they slide (ui.js moves it);
+     inside it, a copy of the labels shows in the accent colour. */
+  .tab-thumb { position: absolute; top: 0; left: 0; bottom: 0; width: calc(50% - 3px); overflow: hidden; border: 1px solid var(--accent); background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--panel); pointer-events: none; transform: translateX(calc(var(--slide, 0) * (100% + 6px))); will-change: transform; }
+  .tab-thumb-labels { position: absolute; top: -1px; bottom: -1px; left: -1px; width: calc(200% + 6px); display: grid; grid-template-columns: 1fr 1fr; gap: 6px; color: var(--accent); transform: translateX(calc(var(--slide, 0) * (-50% - 3px))); will-change: transform; }
+  .tab-thumb-labels > span { display: flex; align-items: center; justify-content: center; font: 11px/1.4 var(--mono); letter-spacing: .09em; }
+  /* The two views sit side by side and slide by a swipe or a tab. Both stay laid out,
+     so switching never resizes the core or redraws its stars. */
+  .workspace { display: flex; flex: 1 1 0; min-height: 0; min-width: 0; margin: 0 -12px; padding: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; }
+  .workspace::-webkit-scrollbar { display: none; }
+  /* LIVE opens with the first search: nothing to swipe to before it. */
+  body[data-ran=false] .workspace { overflow-x: hidden; }
+  .pane { display: flex; flex: 0 0 100%; flex-direction: column; gap: 10px; min-width: 0; height: 100%; padding: 1px 12px; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: none; scroll-snap-align: start; scroll-snap-stop: always; }
+  .pane::-webkit-scrollbar { display: none; }
+  .side-stack { display: none; }
+  /* Each view's actions sit in a fixed bar at the bottom, in the same place, and slide
+     with their view (ui.js moves TARGET's INITIATE and ABORT here). */
+  .dock-track { display: flex; flex: 0 0 46px; margin: 0 -12px; overflow: hidden; }
+  .target-dock, .mobile-dock { display: flex; flex: 0 0 100%; min-width: 0; gap: 8px; margin: 0; padding: 0 12px; transform: translateX(calc(var(--slide, 0) * -100%)); will-change: transform; }
+  .target-dock .actions { display: flex; flex: 1; min-width: 0; gap: 8px; margin: 0; }
+  .target-dock .primary, .mobile-dock .primary { flex: 1; min-width: 0; min-height: 46px; }
+  .target-dock .abort, .mobile-dock .abort { flex: 0 0 70px; min-height: 46px; order: 1; }
+  /* TARGET fills its view, the selects at the bottom. Only a screen too short for the
+     minimum layout scrolls this view. */
+  .payload { flex: 1 0 auto; }
+  .payload-body { flex: 1 1 auto; padding: 14px; }
 
-  body[data-view=live] .core { flex: 1 0 330px; min-height: 330px; }
+  #pane-live .core { flex: 1 0 330px; min-height: 330px; }
   .core-view { min-height: 144px; }
   .core-activity { display: flex; flex: 0 0 36px; height: 36px; min-height: 36px; max-height: 36px; overflow: hidden; flex-direction: column; justify-content: flex-end; padding: 2px 12px; border-top: 0; background: var(--panel); font: 9px/16px var(--mono); pointer-events: none; }
   .core-activity .event { flex: 0 0 16px; height: 16px; min-height: 16px; padding: 0; animation: none; }
@@ -326,10 +345,6 @@ body[data-state] .panel.is-tracing { border-color: var(--line); }
   .factor-values { font-size: 18px; gap: 8px; }
   .factor-values.long { font-size: 11px; }
   .copy { grid-column: 2; grid-row: 1; margin: 4px 8px 4px 0; padding: 5px 8px; min-height: 32px; font-size: 10px; }
-  body[data-view=live] .mobile-dock { display: flex; flex: 0 0 46px; gap: 8px; margin: 0; padding: 0; }
-  .mobile-dock .primary { flex: 1; order: 0; }
-  .mobile-dock .abort { flex: 0 0 70px; order: 1; }
-  .mobile-dock .primary, .mobile-dock .abort { min-height: 46px; }
   body[data-state=found] .lock-banner { padding: 9px 12px; gap: 3px; }
   .locked-divisor { font-size: 15px; }
   .locked-divisor.long { font-size: 9px; }
@@ -361,6 +376,48 @@ body[data-state] .panel.is-tracing { border-color: var(--line); }
   body:is([data-state=screening],[data-state=running],[data-state=pausing],[data-state=paused],[data-state=resuming],[data-state=stopping]) #output-panel > .coverage { display: flex; }
   body:is([data-state=screening],[data-state=running],[data-state=pausing],[data-state=paused],[data-state=resuming],[data-state=stopping]) #output-panel > :not(.coverage, .result-flare) { display: none; }
   .result-coverage { display: block; margin-top: 2px; font: 9px/1.2 var(--mono); letter-spacing: .06em; color: var(--muted); white-space: nowrap; }
+  /* Phones: TELEMETRY takes the room the coverage plot has on the desktop, between the
+     candidate count and the controls (ui.js moves it). The chart gives height to INTEGER N. */
+  .payload .telemetry-body { display: flex; flex: 1 1 auto; flex-direction: column; gap: 5px; min-height: 0; padding: 10px 0 0; border-top: 1px solid var(--fine); }
+  .payload .telemetry-body > * { flex: 0 0 auto; }
+  .payload #rate-chart { flex: 1 1 0px; height: auto; min-height: 40px; margin: 0; }
+  .payload .worker-heading { margin: 3px 0 0; padding: 0; border: 0; font-size: 9px; }
+  .payload #worker-lanes { grid-template-columns: repeat(2,minmax(0,1fr)); grid-template-rows: none; grid-auto-flow: row; grid-auto-rows: 14px; gap: 2px 14px; margin: 0; }
+  .payload .worker-lane { grid-template-columns: 2ch minmax(10px,1fr) 8.5ch; gap: 5px; font-size: 9px; }
+  .payload #worker-lanes[data-columns="4"] { grid-template-columns: repeat(4,minmax(0,1fr)); grid-auto-rows: 12px; gap: 1px 10px; }
+  .payload #worker-lanes[data-columns="4"] .worker-lane { grid-template-columns: 2ch minmax(8px,1fr); }
+  .payload #worker-lanes[data-columns="4"] .worker-lane output { display: none; }
+  .pane { container: pane / size; }
+}
+/* Portrait phones (and any phone view taller than 590px). */
+@media (orientation: portrait), (min-height: 591px) {
+  /* A shorter phone view keeps every control and the chart, and never scrolls for a long N:
+     first the lanes give way, then the axis and the bit count (the selects tighten as on
+     short desktop windows), and last the candidate count folds into one line. */
+  @container pane (max-height: 580px) {
+    .payload .worker-heading, .payload #worker-lanes { display: none; }
+  }
+  @container pane (max-height: 520px) {
+    .payload .input-meta, .payload .chart-axis { display: none; }
+    .search-controls { margin-top: 10px; }
+    .search-controls .preset-setting, .search-controls .limit-row, .search-controls .worker-setting { margin-bottom: 6px; }
+    .search-controls select { min-height: 30px; padding-top: 5px; padding-bottom: 5px; }
+  }
+  /* A short phone keeps the whole LIVE view on screen, the stats included: the two-line
+     log gives way, the sphere's box shrinks, and the counter and stats tighten. */
+  @container pane (max-height: 455px) {
+    #pane-live .core { flex: 1 1 auto; min-height: 260px; }
+    #pane-live .core-activity { display: none; }
+    #pane-live .core-view { min-height: 96px; }
+    #pane-live .trial-block { padding-top: 6px; padding-bottom: 4px; }
+    #pane-live .counter { height: 52px; min-height: 52px; }
+    #pane-live .stats { padding-top: 7px; padding-bottom: 7px; }
+  }
+  @container pane (max-height: 470px) {
+    .payload-body { padding-top: 10px; padding-bottom: 10px; }
+    .target-data .candidate-block { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 7px 0; }
+    .target-data .candidate-block output { font-size: 17px; line-height: 1.3; white-space: nowrap; }
+  }
 }
 @media (min-width:761px) and (max-width:1100px) {
   .app { grid-template-rows: 100px minmax(0,1fr); }
@@ -371,6 +428,56 @@ body[data-state] .panel.is-tracing { border-color: var(--line); }
   .site-header .brand-caption { display: none; }
   .site-header .intro-meta { grid-column: 3/-1; grid-row: 2; justify-self: end; }
   .coverage-plot { flex: 1 0 90px; }
+}
+/* Landscape phones (after the tablet rules, which a phone on its side may also match):
+   every view takes the full height. Brand, toolbar and tabs form a rail
+   on the left (the tabs at the bottom, under the left thumb). LIVE gives the core the whole
+   height, with the count, the result and the actions on the right; TARGET gives the digits
+   the left and the chart, selects and INITIATE the right. The two-line log is left out. */
+@media (max-width:760px) and (orientation:landscape) and (max-height:590px), (pointer:coarse) and (orientation:landscape) and (max-height:590px) {
+  .app { display: grid; grid-template-columns: clamp(116px,15vw,128px) minmax(0,1fr); grid-template-rows: minmax(0,1fr); column-gap: 12px; max-width: none; padding: 10px 12px; }
+  .chrome { grid-column: 1; grid-row: 1; justify-content: space-between; gap: 12px; min-height: 0; }
+  .site-header { grid-template-columns: 20px minmax(0,1fr); grid-template-rows: 20px auto auto; row-gap: 10px; }
+  .site-header::after, .site-header .brand-caption { display: none; }
+  .site-header h1 { grid-column: 1 / -1; grid-row: 2; margin: 0; font-size: 21px; line-height: 1.1; }
+  .site-header h1 .slash::after { content: '\A'; white-space: pre; }
+  .site-header .toolbar { grid-column: 1 / -1; grid-row: 3; justify-self: stretch; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 0 0; }
+  .site-header #fx-toggle, .site-header #sound-toggle { grid-column: 1 / -1; min-width: 0; }
+  .mobile-tabs button, .tab-thumb-labels > span { font-size: 10px; letter-spacing: .06em; }
+  .workspace { grid-column: 2; grid-row: 1; margin: 0 -12px; }
+  #pane-live { display: grid; grid-template-columns: minmax(0,1fr) clamp(220px,28vw,240px); grid-template-rows: minmax(0,1fr) 116px 46px; gap: 10px; }
+  #pane-live .core { grid-column: 1; grid-row: 1 / -1; min-height: 0; }
+  #pane-live .core-view { min-height: 0; }
+  #pane-live .core-activity { display: none; }
+  #pane-live .readout { display: flex; grid-column: 2; grid-row: 1; flex-direction: column; justify-content: center; min-height: 0; overflow: hidden; }
+  #pane-live .output { grid-column: 2; grid-row: 2; }
+  /* A narrow slot puts the coverage value under its label rather than cut it. */
+  #output-panel .coverage-heading { flex-wrap: wrap; row-gap: 0; }
+  #output-panel #coverage-value { margin-left: auto; font-size: 16px; }
+  #pane-live .mobile-dock { grid-column: 2; grid-row: 3; padding: 0; transform: none; }
+  #pane-live .mobile-dock .primary { gap: 8px; padding: 10px; font-size: 11px; }
+  #pane-live .mobile-dock .abort { flex-basis: 56px; }
+  .payload { flex: 1 1 auto; min-height: 0; }
+  .payload-body { display: grid; grid-template-columns: minmax(0,1fr) 222px; grid-template-rows: auto minmax(0,1fr) auto auto; column-gap: 18px; padding: 12px 14px; }
+  .payload-body > .field-heading { grid-column: 1; grid-row: 1; }
+  .payload .input-frame { grid-column: 1; grid-row: 2; overflow: hidden; }
+  .payload .input-meta { grid-column: 1; grid-row: 3; }
+  .target-data { grid-column: 1; grid-row: 4; flex: none; margin: 8px 0 0; }
+  .target-data .candidate-block { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 6px 0 0; }
+  .target-data .candidate-block output { font-size: 18px; line-height: 1.3; white-space: nowrap; }
+  /* ui.js moves TELEMETRY and the controls into this column. */
+  .target-side { display: flex; grid-column: 2; grid-row: 1 / -1; flex-direction: column; min-height: 0; }
+  .payload .telemetry-body { flex: 1 1 auto; padding: 0; border: 0; }
+  /* A phone on its side may be as wide as a tablet: undo the tablet layout's cuts. */
+  .payload .telemetry-label, .payload .chart-axis { display: flex; }
+  .payload #rate-chart { display: block; }
+  .payload-body { overflow: hidden; }
+  .payload .worker-heading, .payload #worker-lanes { display: none; }
+  .search-controls { flex: 0 0 auto; margin-top: 10px; padding-top: 10px; }
+  .search-controls .preset-setting, .search-controls .limit-row, .search-controls .worker-setting { margin-bottom: 6px; }
+  .search-controls select { min-height: 30px; padding-top: 5px; padding-bottom: 5px; }
+  .search-controls .actions { margin-top: 8px; }
+  .search-controls .primary, .search-controls .abort { min-height: 40px; }
 }
 /* Dense arrays keep the numeric bars and six readable log rows. Only
    expendable prompt/padding yields when two columns alone cannot fit. */

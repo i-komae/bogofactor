@@ -6,6 +6,8 @@
  * canvases per traced panel lie on the border line (outside the panel's
  * overflow clip) and are hidden while idle; until the lap completes the panel
  * keeps its previous border (.is-tracing). The caller supplies its animation clock.
+ * A lap starts when its panel is first drawn in view (on a phone the LIVE view is still
+ * sliding in when a search starts); a panel that stays out of view gives the lap up.
  */
 class PanelRims {
   constructor(host, panels) {
@@ -28,7 +30,7 @@ class PanelRims {
   trace(panel, color, head, seconds) {
     const item = this.items.find(i => i.panel === panel);
     if (!item) return;
-    item.run = { color, head, seconds, start: null }; this.traces++;
+    item.run = { color, head, seconds, start: null, queued: performance.now() }; this.traces++;
     panel.classList.add('is-tracing');
   }
   cancel() { for (const item of this.items) this.end(item); }
@@ -67,12 +69,15 @@ class PanelRims {
     ctx.fillStyle = g; ctx.fillRect(0, 0, 256, 1);
     this.textures.set(key, texture); return texture;
   }
-  draw(now, enabled) {
+  draw(now, enabled, inView = enabled) {
     for (const item of this.items) {
       const run = item.run;
       if (!run) continue;
       if (!enabled) { this.end(item); continue; }
-      if (run.start === null) run.start = now;
+      if (run.start === null) {
+        if (!inView) { if (now - run.queued > 1200) this.end(item); continue; }
+        run.start = now;
+      }
       const t = (now - run.start) / 1000 / run.seconds;
       if (t >= 1) { this.end(item); this.completed++; item.laps++; continue; }
       if (!item.box && !this.measure(item)) continue;

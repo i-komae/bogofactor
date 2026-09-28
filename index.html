@@ -31,7 +31,7 @@
     <link rel="stylesheet" href="css/share.css"/>
     <link rel="stylesheet" href="css/interface.css"/>
   </head>
-  <body data-state="boot" data-fx="full" data-view="input">
+  <body data-state="boot" data-fx="full" data-view="input" data-ran="false">
     <a class="skip-link" href="#n-input">Skip to input</a>
     <div class="ambient-grid" aria-hidden="true"></div>
     <div id="boot-intro" aria-hidden="true">
@@ -62,180 +62,193 @@
         </div>
       </header>
       <nav class="mobile-tabs" aria-label="Workspace views">
-        <button id="view-input" aria-controls="workspace" type="button" aria-pressed="true">TARGET</button>
-        <button id="view-live" aria-controls="workspace" type="button" aria-pressed="false" disabled="">LIVE</button>
+        <button id="view-input" aria-controls="pane-input" type="button" aria-pressed="true">TARGET</button>
+        <button id="view-live" aria-controls="pane-live" type="button" aria-pressed="false" disabled="">LIVE</button>
+        <span class="tab-thumb" id="tab-thumb" aria-hidden="true"><span class="tab-thumb-labels"><span>TARGET</span><span>LIVE</span></span></span>
       </nav>
       </div>
       <div class="workspace" id="workspace">
-        <form id="form" class="panel payload" novalidate="">
-          <div class="panel-heading">
-            <h2>TARGET PAYLOAD</h2>
-          </div>
-          <div class="payload-body">
-            <div class="field-heading">
-              <label for="n-input">INTEGER N</label>
-              <span class="field-meta"><span id="input-digits">19 DIGITS</span><button type="button" id="view-all" class="view-all" aria-haspopup="dialog" hidden="">VIEW ALL</button></span>
-            </div>
-            <div class="input-frame">
-              <textarea id="n-input" rows="3" inputmode="numeric" spellcheck="false" autocomplete="off" autocapitalize="off" maxlength="10000" aria-describedby="error">1000000016000000063</textarea>
-              <div id="n-preview" class="n-preview" aria-hidden="true"></div>
-            </div>
-            <div class="input-meta">
-              <span>INTEGER / EXACT</span>
-              <span id="input-bits">60 BITS</span>
-            </div>
-            <div class="target-data">
-              <div class="candidate-block">
-                <span class="eyebrow">ELIGIBLE CANDIDATES</span>
-                <output id="candidate-count" aria-live="polite">—</output>
-                <span class="candidate-note">UNIFORM DRAW · WITH REPLACEMENT</span>
-                <p id="error" class="error" role="alert" hidden=""></p>
-              </div>
-              <section class="coverage" aria-label="Expected candidate coverage">
-                <div class="coverage-heading">
-                  <span class="eyebrow">EXPECTED COVERAGE</span>
-                  <output id="coverage-value" aria-live="off">0 %</output>
-                </div>
-                <div class="coverage-plot"><canvas id="coverage-curve" role="img" aria-label="Expected fraction of candidates drawn at least once; trials range from zero to three times the candidate count"></canvas></div>
-                <p class="coverage-note" title="Expected share: 1 − (1 − 1/C)^t. The curve uses 1 − exp(−t/C); C is the number of eligible candidates, t is completed trials. This is an expectation, not a count of distinct draws.">SHARE OF CANDIDATES DRAWN AT LEAST ONCE</p>
-              </section>
-            </div>
-            <div class="search-controls">
-              <div class="preset-setting">
-                <label for="preset">LOAD TARGET</label>
-                <div class="select-wrap">
-                  <select id="preset" aria-label="Select an input example">
-                    <option value="">Custom integer</option>
-                  </select>
-                  <span aria-hidden="true">⌄</span>
-                </div>
-              </div>
-              <div class="limit-row">
-                <label for="cap">TRIAL LIMIT</label>
-                <div class="select-wrap">
-                  <select id="cap">
-                    <option value="100000">100,000</option>
-                    <option value="1000000">1,000,000</option>
-                    <option value="100000000">100,000,000</option>
-                    <option value="0" selected="">Unlimited</option>
-                  </select>
-                  <span aria-hidden="true">⌄</span>
-                </div>
-              </div>
-              <div class="worker-setting">
-                <label for="workers">WORKERS <span id="workers-hint"></span></label>
-                <div class="select-wrap">
-                  <select id="workers" aria-label="Number of parallel workers"></select>
-                  <span aria-hidden="true">⌄</span>
-                </div>
-              </div>
-              <div class="actions">
-                <button type="submit" id="start" class="primary" disabled=""><span id="start-label">INITIALIZING</span><svg class="action-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 4L15 10L7 16Z"></path></svg></button>
-                <button type="button" id="stop" class="abort" hidden="">ABORT</button>
-              </div>
-              <p class="key-hint"><span>⌘ / CTRL + ENTER</span><span>RUN / PAUSE</span></p>
-            </div>
-          </div>
-        </form>
-        <section class="panel core" aria-label="Live divisor search">
-          <div class="panel-heading">
-            <h2>ENTROPY CORE</h2>
-            <span class="heading-meta"><span id="core-engine">WASM / INITIALIZING</span><span id="core-workers">WORKERS / READY</span></span>
-            <span class="state-indicator" id="status" role="status" aria-live="polite" data-state="boot">INITIALIZING</span>
-          </div>
-          <div class="core-view" id="core-view">
-            <canvas id="reactor" aria-hidden="true"></canvas>
-            <div class="core-state" aria-hidden="true">
-              <strong id="core-word">STANDBY</strong>
-              <span id="core-sub">AWAITING INPUT</span>
-            </div>
-            <div class="lock-banner" id="lock-banner" aria-hidden="true">
-              <span>NON-TRIVIAL DIVISOR</span>
-              <b>FACTOR LOCKED</b>
-              <span id="locked-divisor" class="locked-divisor"></span>
-            </div>
-          </div>
-          <div class="core-activity" id="core-activity" aria-hidden="true"></div>
-          <div class="trial-block">
-            <div class="counter-heading">
-              <h3>TRIALS EXECUTED</h3>
-              <span class="live-tag" id="counter-tag">EXACT COUNT</span>
-            </div>
-            <div class="counter">
-              <output id="trial-count" class="counter-number" aria-live="off" aria-label="0 trials"><span class="sr-only" id="exact-count">0</span><span id="counter-reels" aria-hidden="true"></span></output>
-            </div>
-          </div>
-          <dl class="stats">
-            <div>
-              <dt>ELAPSED</dt>
-              <dd><span id="elapsed">—</span><span id="elapsed-unit" class="unit"></span></dd>
-            </div>
-            <div>
-              <dt id="rate-label">THROUGHPUT</dt>
-              <dd><span id="rate">—</span><span id="rate-unit" class="unit"></span></dd>
-            </div>
-          </dl>
-        </section>
-        <aside class="side-stack" aria-label="Runtime telemetry">
-          <section class="panel throughput-panel">
+        <div class="pane" id="pane-input">
+          <form id="form" class="panel payload" novalidate="">
             <div class="panel-heading">
-              <h2>TELEMETRY</h2>
+              <h2>TARGET PAYLOAD</h2>
             </div>
-            <div class="telemetry-body">
-              <div class="telemetry-label">
-                <span title="Highest measured sample in the displayed history">RECENT PEAK</span>
-                <span id="chart-peak">—</span>
+            <div class="payload-body">
+              <div class="field-heading">
+                <label for="n-input">INTEGER N</label>
+                <span class="field-meta"><span id="input-digits">19 DIGITS</span><button type="button" id="view-all" class="view-all" aria-haspopup="dialog" hidden="">VIEW ALL</button></span>
               </div>
-              <svg id="rate-chart" viewBox="0 0 260 76" preserveAspectRatio="none" role="img" aria-label="Measured throughput history; no data yet"><path class="chart-grid" d="M0 12H260M0 38H260M0 64H260M52 0V76M104 0V76M156 0V76M208 0V76"></path><path id="rate-area" d="M0 76H260Z"></path><path id="rate-path" d="M0 70H260"></path></svg>
-              <div class="chart-axis">
-                <span>RECENT SAMPLES</span>
-                <span>NOW</span>
+              <div class="input-frame">
+                <textarea id="n-input" rows="3" inputmode="numeric" spellcheck="false" autocomplete="off" autocapitalize="off" maxlength="10000" aria-describedby="error">1000000016000000063</textarea>
+                <div id="n-preview" class="n-preview" aria-hidden="true"></div>
               </div>
-              <div class="worker-heading">
-                <span>COMPUTE ARRAY</span>
-                <span id="workers-active">—</span>
+              <div class="input-meta">
+                <span>INTEGER / EXACT</span>
+                <span id="input-bits">60 BITS</span>
               </div>
-              <div id="worker-lanes" aria-label="Per-worker throughput"></div>
+              <div class="target-data">
+                <div class="candidate-block">
+                  <span class="eyebrow">ELIGIBLE CANDIDATES</span>
+                  <output id="candidate-count" aria-live="polite">—</output>
+                  <span class="candidate-note">UNIFORM DRAW · WITH REPLACEMENT</span>
+                  <p id="error" class="error" role="alert" hidden=""></p>
+                </div>
+                <section class="coverage" aria-label="Expected candidate coverage">
+                  <div class="coverage-heading">
+                    <span class="eyebrow">EXPECTED COVERAGE</span>
+                    <output id="coverage-value" aria-live="off">0 %</output>
+                  </div>
+                  <div class="coverage-plot"><canvas id="coverage-curve" role="img" aria-label="Expected fraction of candidates drawn at least once; trials range from zero to three times the candidate count"></canvas></div>
+                  <p class="coverage-note" title="Expected share: 1 − (1 − 1/C)^t. The curve uses 1 − exp(−t/C); C is the number of eligible candidates, t is completed trials. This is an expectation, not a count of distinct draws.">SHARE OF CANDIDATES DRAWN AT LEAST ONCE</p>
+                </section>
+              </div>
+              <div class="search-controls">
+                <div class="preset-setting">
+                  <label for="preset">LOAD TARGET</label>
+                  <div class="select-wrap">
+                    <select id="preset" aria-label="Select an input example">
+                      <option value="">Custom integer</option>
+                    </select>
+                    <span aria-hidden="true">⌄</span>
+                  </div>
+                </div>
+                <div class="limit-row">
+                  <label for="cap">TRIAL LIMIT</label>
+                  <div class="select-wrap">
+                    <select id="cap">
+                      <option value="100000">100,000</option>
+                      <option value="1000000">1,000,000</option>
+                      <option value="100000000">100,000,000</option>
+                      <option value="0" selected="">Unlimited</option>
+                    </select>
+                    <span aria-hidden="true">⌄</span>
+                  </div>
+                </div>
+                <div class="worker-setting">
+                  <label for="workers">WORKERS <span id="workers-hint"></span></label>
+                  <div class="select-wrap">
+                    <select id="workers" aria-label="Number of parallel workers"></select>
+                    <span aria-hidden="true">⌄</span>
+                  </div>
+                </div>
+                <div class="actions">
+                  <button type="submit" id="start" class="primary" form="form" disabled=""><span id="start-label">INITIALIZING</span><svg class="action-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 4L15 10L7 16Z"></path></svg></button>
+                  <button type="button" id="stop" class="abort" hidden="">ABORT</button>
+                </div>
+                <p class="key-hint"><span>⌘ / CTRL + ENTER</span><span>RUN / PAUSE</span></p>
+              </div>
+              <!-- Landscape phones: the chart, selects and INITIATE, in a column beside the digits. -->
+              <div class="target-side"></div>
             </div>
-          </section>
-          <section class="panel log-panel">
+          </form>
+        </div>
+        <div class="pane" id="pane-live">
+          <section class="panel core" aria-label="Live divisor search">
             <div class="panel-heading">
-              <h2>EVENT STREAM</h2>
+              <h2>ENTROPY CORE</h2>
+              <span class="heading-meta"><span id="core-engine">WASM / INITIALIZING</span><span id="core-workers">WORKERS / READY</span></span>
+              <span class="state-indicator" id="status" role="status" aria-live="polite" data-state="boot">INITIALIZING</span>
             </div>
-            <div id="event-log" class="event-log" role="region" aria-label="Live computation activity" aria-live="off" tabindex="0"></div>
-            <div class="terminal-prompt" aria-hidden="true">
-              <span>factor@local:~</span>
-              <i></i>
+            <div class="core-view" id="core-view">
+              <canvas id="reactor" aria-hidden="true"></canvas>
+              <div class="core-state" aria-hidden="true">
+                <strong id="core-word">STANDBY</strong>
+                <span id="core-sub">AWAITING INPUT</span>
+              </div>
+              <div class="lock-banner" id="lock-banner" aria-hidden="true">
+                <span>NON-TRIVIAL DIVISOR</span>
+                <b>FACTOR LOCKED</b>
+                <span id="locked-divisor" class="locked-divisor"></span>
+              </div>
             </div>
+            <div class="core-activity" id="core-activity" aria-hidden="true"></div>
+            <div class="trial-block">
+              <div class="counter-heading">
+                <h3>TRIALS EXECUTED</h3>
+                <span class="live-tag" id="counter-tag">EXACT COUNT</span>
+              </div>
+              <div class="counter">
+                <output id="trial-count" class="counter-number" aria-live="off" aria-label="0 trials"><span class="sr-only" id="exact-count">0</span><span id="counter-reels" aria-hidden="true"></span></output>
+              </div>
+            </div>
+            <dl class="stats">
+              <div>
+                <dt>ELAPSED</dt>
+                <dd><span id="elapsed">—</span><span id="elapsed-unit" class="unit"></span></dd>
+              </div>
+              <div>
+                <dt id="rate-label">THROUGHPUT</dt>
+                <dd><span id="rate">—</span><span id="rate-unit" class="unit"></span></dd>
+              </div>
+            </dl>
           </section>
-        </aside>
-        <section class="panel output" id="output-panel" aria-label="Divisor search result">
-          <div class="output-label">
-            <span class="eyebrow">RESULT</span>
-            <h2 id="result-heading">AWAITING<br/>RESULT</h2>
-            <span id="result-coverage" class="result-coverage" hidden=""></span>
-            <div class="verification" id="verification">N = d × q</div>
-          </div>
-          <div class="output-body" tabindex="0" aria-label="Complete divisor search result">
-            <div id="factor-empty" class="factor-empty">
-              <span class="empty-dashes" aria-hidden="true">— — —</span>
-              <span id="empty-message">ONE GUESS. ZERO PATIENCE.</span>
+          <!-- Landscape phones: the trial count and stats, beside a full-height core. -->
+          <section class="panel readout" id="live-readout" aria-label="Trial count"></section>
+          <aside class="side-stack" aria-label="Runtime telemetry">
+            <section class="panel throughput-panel">
+              <div class="panel-heading">
+                <h2>TELEMETRY</h2>
+              </div>
+              <div class="telemetry-body">
+                <div class="telemetry-label">
+                  <span title="Highest reading in the last 20 seconds of search time">RECENT PEAK</span>
+                  <span id="chart-peak">—</span>
+                </div>
+                <svg id="rate-chart" viewBox="0 0 260 76" preserveAspectRatio="none" role="img" aria-label="Measured throughput history; no data yet"><path class="chart-grid" d="M0 12H260M0 38H260M0 64H260M52 0V76M104 0V76M156 0V76M208 0V76"></path><path id="rate-area" d="M0 76H260Z"></path><path id="rate-path" d="M0 70H260"></path></svg>
+                <div class="chart-axis">
+                  <span title="Search time; the vertical lines are 4 seconds apart">−20 S</span>
+                  <span>NOW</span>
+                </div>
+                <div class="worker-heading">
+                  <span>COMPUTE ARRAY</span>
+                  <span id="workers-active">—</span>
+                </div>
+                <div id="worker-lanes" aria-label="Per-worker throughput"></div>
+              </div>
+            </section>
+            <section class="panel log-panel">
+              <div class="panel-heading">
+                <h2>EVENT STREAM</h2>
+              </div>
+              <div id="event-log" class="event-log" role="region" aria-label="Live computation activity" aria-live="off" tabindex="0"></div>
+              <div class="terminal-prompt" aria-hidden="true">
+                <span>factor@local:~</span>
+                <i></i>
+              </div>
+            </section>
+          </aside>
+          <section class="panel output" id="output-panel" aria-label="Divisor search result">
+            <div class="output-label">
+              <span class="eyebrow">RESULT</span>
+              <h2 id="result-heading">AWAITING<br/>RESULT</h2>
+              <span id="result-coverage" class="result-coverage" hidden=""></span>
+              <div class="verification" id="verification">N = d × q</div>
             </div>
-            <div id="factor-values" class="factor-values" hidden="">
-              <span id="factor-d"></span>
-              <span class="multiply"><span aria-hidden="true">×</span><span class="sr-only">times</span></span>
-              <span id="factor-q"></span>
+            <div class="output-body" tabindex="0" aria-label="Complete divisor search result">
+              <div id="factor-empty" class="factor-empty">
+                <span class="empty-dashes" aria-hidden="true">— — —</span>
+                <span id="empty-message">ONE GUESS. ZERO PATIENCE.</span>
+              </div>
+              <div id="factor-values" class="factor-values" hidden="">
+                <span id="factor-d"></span>
+                <span class="multiply"><span aria-hidden="true">×</span><span class="sr-only">times</span></span>
+                <span id="factor-q"></span>
+              </div>
+              <p id="result-note" class="result-note" hidden=""></p>
             </div>
-            <p id="result-note" class="result-note" hidden=""></p>
-          </div>
-          <button type="button" id="copy" class="copy" hidden=""><span id="copy-label">SHARE</span><span aria-hidden="true">↗</span></button>
-          <div class="result-flare" aria-hidden="true"></div>
-        </section>
+            <button type="button" id="copy" class="copy" hidden=""><span id="copy-label">SHARE</span><span aria-hidden="true">↗</span></button>
+            <div class="result-flare" aria-hidden="true"></div>
+          </section>
+        </div>
       </div>
-      <div class="mobile-dock">
-        <button id="mobile-main" type="button" class="primary"><span id="mobile-main-label">PAUSE SEARCH</span><svg class="action-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 4L15 10L7 16Z"></path></svg></button>
-        <button id="mobile-stop" class="abort" type="button">ABORT</button>
-        <button id="mobile-new" class="primary" type="button" hidden="">NEW TARGET <span aria-hidden="true">↗</span></button>
+      <!-- Phones: each view's actions, fixed at the bottom; they slide with their view. -->
+      <div class="dock-track" id="dock-track">
+        <div class="target-dock" id="target-dock"></div>
+        <div class="mobile-dock" id="live-dock">
+          <button id="mobile-main" type="button" class="primary"><span id="mobile-main-label">PAUSE SEARCH</span><svg class="action-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 4L15 10L7 16Z"></path></svg></button>
+          <button id="mobile-stop" class="abort" type="button">ABORT</button>
+          <button id="mobile-new" class="primary" type="button" hidden="">NEW TARGET <span aria-hidden="true">↗</span></button>
+        </div>
       </div>
       <noscript>
         <p class="error">Enable JavaScript to use this application.</p>

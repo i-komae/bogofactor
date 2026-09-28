@@ -2,6 +2,9 @@
 /** Coordinator with a Worker-like interface. Exact quotas, bounded reports and a
  * pause/stop barrier. All completed in-flight tests are included in final counts. */
 class SearchPool {
+  // Throughput history: 41 readings 0.5 s apart span the chart's 20 s of search time.
+  static HISTORY = 41;
+  static HISTORY_STEP = 500;
   constructor(url) {
     this.url = url; this.nodes = []; this.job = null; this.dead = false; this.onmessage = null; this.onerror = null;
     this.timer = 0; this.frame = 0; this.outstanding = null; this.seq = 0;
@@ -31,6 +34,7 @@ class SearchPool {
         node.prepared = true; j.candidateCount = m.candidateCount;
         if (this.nodes.every(n => n.prepared) && j.phase === 'setup') {
           j.phase = 'running'; j.started = performance.now();
+          j.rates.reset(0n, 0); j.rateAt = 0; j.historyAt = SearchPool.HISTORY_STEP;
           for (const n of this.nodes) n.worker.postMessage({ cmd: 'run', id: j.id });
           this._snapshot('running', true);
         }
@@ -38,6 +42,7 @@ class SearchPool {
       }
       if (m.type === 'snapshot') {
         node.latest = m;
+        if (m.status === 'running' && j.phase === 'running') this._measure(j);
         if (m.sample) node.sample = m.sample;
         // Kept until the display takes them, even while frames are not delivered
         // (a hidden tab); beyond capacity only the oldest samples are replaced.
@@ -88,6 +93,23 @@ class SearchPool {
     });
   }
   _elapsed() { const j = this.job; return j ? j.elapsed + (j.started === null ? 0 : performance.now() - j.started) : 0; }
+  _trials() { return this.nodes.reduce((s, n) => s + BigInt(n.latest?.trials || 0), 0n); }
+  // Measured as worker reports arrive, not when a frame is drawn: a hidden tab
+  // delivers no frames but keeps both the recent rate and the throughput
+  // history, one reading of the recent rate per HISTORY_STEP ms of search time.
+  // A report that arrives late gives its reading to every step it passed.
+  _measure(j) {
+    const ms = this._elapsed();
+    if (ms - j.rateAt < 240 && ms < j.historyAt) return;
+    const trials = this._trials();
+    if (ms - j.rateAt >= 240) { j.rates.record(trials, ms); j.rateAt = ms; }
+    while (ms >= j.historyAt) {
+      const rate = j.rates.value(trials, ms);
+      if (rate !== null) j.history.push(rate);
+      j.historyAt += SearchPool.HISTORY_STEP;
+    }
+    if (j.history.length > SearchPool.HISTORY) j.history.splice(0, j.history.length - SearchPool.HISTORY);
+  }
   _freeze() { if (this.job?.started !== null && this.job) { this.job.elapsed = this._elapsed(); this.job.started = null; } }
   _requestSnapshot() {
     if (this.frame || this.outstanding !== null || this.dead) return;
@@ -96,13 +118,14 @@ class SearchPool {
   _snapshot(status, force = false) {
     const j = this.job; if (!j) return;
     if (!force && this.outstanding !== null) return;
-    const trials = this.nodes.reduce((s, n) => s + BigInt(n.latest?.trials || 0), 0n);
-    const ms = this._elapsed();
-    if (ms - j.rateAt >= 240 || !j.rates.size) { j.rates.record(trials, ms); j.rateAt = ms; }
+    if (status === 'running' && j.phase === 'running') this._measure(j);
+    const trials = this._trials(), ms = this._elapsed();
     const rate = status === 'running' ? j.rates.value(trials, ms) : status === 'paused' ? null : ms >= 1 ? Number(trials) * 1000 / ms : null;
     const seq = ++this.seq; this.outstanding = status === 'running' ? seq : null;
     this._emit({ type: 'snapshot', id: j.id, seq, n: String(j.n), status, trials: String(trials), elapsedMs: ms,
       prepMs: j.prepMs, rate, rateKind: status === 'running' || status === 'paused' ? 'recent' : 'average',
+      // Readings since the previous snapshot, oldest first; each is handed over once.
+      history: j.history.splice(0),
       cap: String(j.cap), candidateCount: j.candidateCount || '', factor: j.factor,
       workers: this.nodes.map((n, i) => {
         // Hand over every buffered sample exactly once; the log still sees only n.sample.
@@ -149,7 +172,7 @@ class SearchPool {
       this.nodes.forEach(node => { node.latest = null; node.sample = null; node.samples = null; node.stopped = false; node.prepared = false; });
       this.outstanding = null;
       this.job = { id: m.id, n, cap, workers, phase: 'screening', elapsed: 0, started: null, prepMs: 0, factor: null,
-        rates: new RateWindow(), rateAt: 0 };
+        rates: new RateWindow(), rateAt: 0, history: [], historyAt: SearchPool.HISTORY_STEP };
       const j = this.job;
       this._emit({ type: 'screening', id: m.id });
       this.nodes[0].ready.then(() => { if (this.job === j) this.nodes[0].worker.postMessage({ cmd: 'screen', id: j.id, n: String(n) }); }).catch(e => this._error(e));
@@ -163,8 +186,8 @@ class SearchPool {
       for (const n of this.nodes) n.worker.postMessage({ cmd: 'pause', id: j.id });
     } else if (m.cmd === 'resume' && j.phase === 'paused') {
       j.phase = 'running'; j.started = performance.now(); this.outstanding = null;
-      const trials = this.nodes.reduce((s, n) => s + BigInt(n.latest?.trials || 0), 0n);
-      j.rates.reset(trials, j.elapsed); j.rateAt = j.elapsed;
+      const trials = this._trials();
+      j.rates.reset(trials, j.elapsed); j.rateAt = j.elapsed; j.historyAt = j.elapsed + SearchPool.HISTORY_STEP;
       for (const n of this.nodes) if (!n.stopped) n.worker.postMessage({ cmd: 'resume', id: j.id });
       this._snapshot('running', true);
     }
